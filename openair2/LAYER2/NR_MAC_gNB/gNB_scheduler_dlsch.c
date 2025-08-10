@@ -322,6 +322,8 @@ int nr_write_ce_dlsch_pdu(module_id_t module_idP,
 
 static void nr_store_dlsch_buffer(module_id_t module_id, frame_t frame, sub_frame_t slot)
 {
+  struct timeval tv;
+
   UE_iterator(RC.nrmac[module_id]->UE_info.list, UE) {
     NR_UE_sched_ctrl_t *sched_ctrl = &UE->UE_sched_ctrl;
     /* add all LCID to fist slice. This is to have a common post-processor function for both slicing and non-slicing scheduler */
@@ -358,12 +360,16 @@ static void nr_store_dlsch_buffer(module_id_t module_id, frame_t frame, sub_fram
       sched_ctrl->sliceInfo[slice_id].dl_pdus_total += sched_ctrl->rlc_status[lcid].pdus_in_buffer;
       sched_ctrl->sliceInfo[slice_id].num_total_bytes += sched_ctrl->rlc_status[lcid].bytes_in_buffer;
       add_nr_list(&sched_ctrl->sliceInfo[slice_id].lcid, lcid);
-      LOG_D(MAC,
-            "[gNB %d][%4d.%2d] %s%d->DLSCH, RLC status for UE %d: %d bytes in buffer, total DL buffer size = %d bytes, %d total "
+        
+      gettimeofday(&tv, NULL);
+
+      LOG_I(MAC,
+            "[gNB %d][%4d.%2d][%ld.%06ld] %s%d->DLSCH, RLC status for UE %d: %d bytes in buffer, total DL buffer size = %d bytes, %d total "
             "PDU bytes, %s TA command\n",
             module_id,
             frame,
             slot,
+            tv.tv_sec, tv.tv_usec,
             lcid < 4 ? "DCCH" : "DTCH",
             lcid,
             UE->rnti,

@@ -374,6 +374,8 @@ int remove_nvs_nr_slice_dl(nr_slice_info_t *si, uint8_t slice_idx)
 
 static void nr_store_dlsch_buffer(module_id_t module_id, frame_t frame, sub_frame_t slot)
 {
+  struct timeval tv;
+
   nr_slice_info_t *si = RC.nrmac[module_id]->pre_processor_dl.slices;
   for (int s = 0; s < si->num; s++) {
     UE_iterator (si->s[s]->UE_list, UE) {
@@ -398,12 +400,16 @@ static void nr_store_dlsch_buffer(module_id_t module_id, frame_t frame, sub_fram
 
         sched_ctrl->sliceInfo[s].dl_pdus_total += sched_ctrl->rlc_status[lcid].pdus_in_buffer;
         sched_ctrl->sliceInfo[s].num_total_bytes += sched_ctrl->rlc_status[lcid].bytes_in_buffer;
-        LOG_D(MAC,
+        
+        gettimeofday(&tv, NULL);
+        
+        LOG_I(MAC,
               "[gNB %d][%4d.%2d] %s%d->DLSCH, RLC status for UE %d, slice %d: %d bytes in buffer, total DL buffer size = %d bytes, "
               "%d total PDU bytes, %s TA command\n",
               module_id,
               frame,
               slot,
+              tv.tv_sec, tv.tv_usec,
               lcid < 4 ? "DCCH" : "DTCH",
               lcid,
               UE->rnti,
