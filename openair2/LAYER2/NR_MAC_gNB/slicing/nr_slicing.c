@@ -404,7 +404,7 @@ static void nr_store_dlsch_buffer(module_id_t module_id, frame_t frame, sub_fram
         gettimeofday(&tv, NULL);
         
         LOG_I(MAC,
-              "[gNB %d][%4d.%2d] %s%d->DLSCH, RLC status for UE %d, slice %d: %d bytes in buffer, total DL buffer size = %d bytes, "
+              "[gNB %d][%4d.%2d][%ld.%06ld] %s%d->DLSCH, RLC status for UE %d, slice %d: %d bytes in buffer, total DL buffer size = %d bytes, "
               "%d total PDU bytes, %s TA command\n",
               module_id,
               frame,
