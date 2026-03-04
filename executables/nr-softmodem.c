@@ -520,6 +520,8 @@ int main( int argc, char **argv ) {
   // strdup to put the sring in the core file for post mortem identification
   char *pckg = strdup(OAI_PACKAGE_VERSION);
   LOG_I(HW, "Version: %s\n", pckg);
+  LOG_I(HW, "[openairinterface5g_modified] gNB build with DRQL/FlexRIC hooks\n");
+
 
   // don't create if node doesn't connect to RRC/S1/GTP
   const ngran_node_t node_type = get_node_type();
