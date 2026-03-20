@@ -1809,12 +1809,35 @@ void nr_rlc_entity_am_recv_sdu(nr_rlc_entity_t *_entity,
     entity->t_log_buffer_full = entity->t_current;
   }
 
+  // HakanGulec: DRQL gate: reject SDU if dynamic RLC limit would be exceeded
+  if (entity->tx_size + size > (int)entity->common.stats.txpdu_status_bytes) {
+
+    // keep original accounting if absolute RLC max would also be exceeded
+    if (entity->tx_size + size > entity->tx_maxsize)
+      
+      entity->sdu_rejected++;
+    
+    LOG_I(RLC, "[DRQL][Limit Reached] limit:%u actual:%d incoming:%d\n",
+      entity->common.stats.txpdu_status_bytes, entity->tx_size, size);
+
+    entity->drql_limit_reached = true;
+
+    return;
+
+  }
+
   if (entity->tx_size + size > entity->tx_maxsize) {
     entity->sdu_rejected++;
     return;
   }
 
   entity->tx_size += size;
+
+  // DRQL
+  LOG_D(RLC, "+++ Added SDU %d -> %d\n", entity->tx_size - size, entity->tx_size);
+
+  //HakanGulec: Occupancy update for DRQL
+  entity->common.stats.txbuf_occ_bytes = entity->tx_size; // DRQL Actual Size (Remaining) for RIC
   // SDU received: Count as arrival bytes
   entity->common.stats.rxsdu_bytes += size;
 
