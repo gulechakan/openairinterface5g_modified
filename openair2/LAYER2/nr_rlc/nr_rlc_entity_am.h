@@ -22,6 +22,10 @@
 #ifndef _NR_RLC_ENTITY_AM_H_
 #define _NR_RLC_ENTITY_AM_H_
 
+// HakanGulec: Add libraries
+#include <stdbool.h>
+#include <time.h>
+
 #include "nr_rlc_entity.h"
 #include "nr_rlc_sdu.h"
 #include "nr_rlc_pdu.h"
@@ -77,13 +81,17 @@ typedef struct {
   /* tx management */
   nr_rlc_sdu_segment_t *tx_list;
   nr_rlc_sdu_segment_t *tx_end;
-  int                  tx_size;
-  int                  tx_maxsize;
+  // HakanGulec: Change it to volatile since they are subject to change for DRQL
+  volatile int         tx_size;
+  volatile int         tx_maxsize;
 
   nr_rlc_sdu_segment_t *wait_list;
   nr_rlc_sdu_segment_t *wait_end;
 
   nr_rlc_sdu_segment_t *retransmit_list;
+
+  // HakanGulec: Variables used for DRQL
+   volatile bool drql_limit_reached;
 } nr_rlc_entity_am_t;
 
 void nr_rlc_entity_am_recv_sdu(nr_rlc_entity_t *entity,
