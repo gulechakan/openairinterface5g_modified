@@ -103,6 +103,13 @@ nr_rlc_entity_t *new_nr_rlc_entity_am(
   ret->tx_maxsize = tx_maxsize;
   ret->rx_maxsize = rx_maxsize;
 
+  // HakanGulec: Initialize DRQL variables
+  ret->drql_limit_reached              = false;
+  ret->common.stats.txpdu_status_bytes = ret->tx_maxsize;  // dynamic limit starts at max (control limit seed)
+  ret->common.stats.txbuf_occ_bytes    = ret->tx_size;    // remaining bytes (telemetry of real remaining bytes)
+  // txpdu_status_bytes should already be initialized by existing OAI flow; 
+  // if needed, seed it to tx_maxsize once.
+
   ret->t_poll_retransmit  = t_poll_retransmit;
   ret->t_reassembly       = t_reassembly;
   ret->t_status_prohibit  = t_status_prohibit;

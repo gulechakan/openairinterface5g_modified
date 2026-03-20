@@ -2062,6 +2062,11 @@ static void clear_entity(nr_rlc_entity_am_t *entity)
   entity->tx_end          = NULL;
   entity->tx_size         = 0;
 
+  // HakanGulec: DRQL reset semantics
+  entity->drql_limit_reached              = false;
+  entity->common.stats.txbuf_occ_bytes    = entity->tx_size;      // should be 0 now
+  entity->common.stats.txpdu_status_bytes = entity->tx_maxsize; // reset control limit
+
   entity->wait_list       = NULL;
   entity->wait_end        = NULL;
 
