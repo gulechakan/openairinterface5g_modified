@@ -579,6 +579,13 @@ process_wait_list_head:
           end_wait_list = prev_wait_list;
         if (nr_rlc_free_sdu_segment(cur_wait_list)) {
           entity->tx_size -= sdu_size;
+
+          // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
+          LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+
+          // DRQL Actual Size (Remaining) for RIC
+          entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+
           // Wait-ACK: count as successfully transmitted bytes
           entity->common.stats.txsdu_bytes += sdu_size;
           entity->common.sdu_successful_delivery(
@@ -644,6 +651,13 @@ process_retransmit_list_head:
                                             + cur->size;
         if (nr_rlc_free_sdu_segment(cur)) {
           entity->tx_size -= sdu_size;
+
+          // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
+          LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+
+          // DRQL Actual Size (Remaining) for RIC
+          entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+
           // Retransmit-ACK: count as successfully transmitted bytes
           entity->common.stats.txsdu_bytes += sdu_size;
           entity->common.sdu_successful_delivery(
@@ -705,6 +719,13 @@ lists_over:
       entity->tx_size -= sdu_size;
       // Wait-NACK done: count as successfully transmitted bytes
       entity->common.stats.txsdu_bytes += sdu_size;
+
+      // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
+      LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+
+      // DRQL Actual Size (Remaining) for RIC
+      entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+
       entity->common.sdu_successful_delivery(
           entity->common.sdu_successful_delivery_data,
           (nr_rlc_entity_t *)entity, upper_layer_id);
@@ -726,6 +747,13 @@ lists_over:
                                         + cur->size;
     if (nr_rlc_free_sdu_segment(cur)) {
       entity->tx_size -= sdu_size;
+
+      // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
+      LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+
+      // DRQL Actual Size (Remaining) for RIC
+      entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+
       // Retransmit-NACK done: count as successfully transmitted bytes
       entity->common.stats.txsdu_bytes += sdu_size;
       entity->common.sdu_successful_delivery(
@@ -2034,6 +2062,12 @@ void nr_rlc_entity_am_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
                                     + cur->size;
 
   entity->tx_size -= cur->sdu->size;
+
+  // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
+  LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+
+  // DRQL Actual Size (Remaining) for RIC
+  entity->common.stats.txbuf_occ_bytes = entity->tx_size;
 
   /* Uncomment to assert if SDU are ever discarded */
   // assert(0 != 0 && "[RLC-TRAP] SDU discard should never be reached!");
