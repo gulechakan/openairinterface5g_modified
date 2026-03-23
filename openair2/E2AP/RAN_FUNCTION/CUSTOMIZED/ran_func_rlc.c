@@ -116,9 +116,11 @@ bool read_rlc_sm(void* data)
       sm_rb->txpdu_retx_bytes = rb_rlc.txpdu_retx_bytes;   /* aggregated amount of bytes to be re-transmitted (only applicable to RLC AM) */
       sm_rb->txpdu_segmented = rb_rlc.txpdu_segmented;    /* aggregated number of segmentations */
       sm_rb->txpdu_status_pkts = rb_rlc.txpdu_status_pkts;  /* aggregated number of tx status pdus/pkts (only applicable to RLC AM) */
-      sm_rb->txpdu_status_bytes = rb_rlc.txpdu_status_bytes; /* aggregated amount of tx status bytes  (only applicable to RLC AM) */
-      sm_rb->txbuf_occ_bytes = rb_rlc.txbuf_occ_bytes;    /* (IMPLEMENTED) transmitting bytes currently in buffer */
-      sm_rb->txbuf_occ_pkts = rb_rlc.txbuf_occ_pkts;     /* current tx buffer occupancy in terms of number of packets (average: NOT IMPLEMENTED) */
+      
+      // HakanGulec: DRQL
+      sm_rb->txpdu_status_bytes = rb_rlc.txpdu_status_bytes; /* aggregated amount of tx status bytes  (only applicable to RLC AM) -> DRQL tx_maxsize*/
+      sm_rb->txbuf_occ_bytes = rb_rlc.txbuf_occ_bytes;    /* (IMPLEMENTED) transmitting bytes currently in buffer -> DRQL tx_size */
+      sm_rb->txbuf_occ_pkts = rb_rlc.txbuf_occ_pkts;     /* current tx buffer occupancy in terms of number of packets (average: NOT IMPLEMENTED) tx_remaining */
 
       /* RX */
       sm_rb->rxpdu_pkts = rb_rlc.rxpdu_pkts;         /* aggregated number of received RLC PDUs */

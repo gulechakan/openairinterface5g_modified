@@ -54,9 +54,17 @@
 #include "gnb_config.h"
 #include "openair2/LAYER2/NR_MAC_gNB/mac_proto.h"
 
+// HakanGulec: DRQL
+#include "openair2/F1AP/drql_common.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_sched.h"
+#include "openair2/analysis_conf.h"
+
 extern RAN_CONTEXT_t RC;
 
 #define GNB_REGISTER_RETRY_DELAY 10
+
+// HakanGulec: DRQL
+bool testing_port;
 
 /*------------------------------------------------------------------------------*/
 
@@ -158,6 +166,28 @@ void *gNB_app_task(void *args_p)
       // need to check SA?
       nr_mac_send_f1_setup_req();
     }
+
+    // HakanGulec: DRQL: Create a custom SDAP scheduler (thread) only if CU or GNB
+    if (NODE_IS_CU(node_type) || NODE_IS_MONOLITHIC(node_type)){
+      if (itti_create_task (TASK_SDAP_GNB, sdap_dl_scheduler, NULL) < 0) {
+        LOG_E(GNB_APP, "Create task for SDAP scheduler failed\n");
+        AssertFatal(1==0,"exiting");
+      }
+
+#ifdef SDAP_STATS_PERSIST
+      if (itti_create_task (TASK_SDAP_GNB, sdap_analysis, NULL) < 0) {
+        LOG_E(GNB_APP, "Create task for SDAP scheduler failed\n");
+        AssertFatal(1==0,"exiting");
+      }
+#endif
+
+      if (itti_create_task (TASK_SDAP_GNB, sdap_predictions_receiver, NULL) < 0) {
+        LOG_E(GNB_APP, "Create task for SDAP predictions receiver failed\n");
+        AssertFatal(1==0,"exiting");
+      }
+
+    }
+
   }
   do {
     // Wait for a message

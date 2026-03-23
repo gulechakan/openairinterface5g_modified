@@ -279,7 +279,9 @@ typedef struct {
   char name[256];
 } task_info_t;
 
+// HakanGulec: First two lines (I deleted TASK_CUDU_GNB)
 #define FOREACH_TASK(TASK_DEF)        \
+  TASK_DEF(TASK_SDAP_GNB, 200)        \
   TASK_DEF(TASK_UNKNOWN, 50)          \
   TASK_DEF(TASK_TIMER, 10)            \
   TASK_DEF(TASK_L2L1, 200)            \
