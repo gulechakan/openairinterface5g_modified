@@ -136,7 +136,8 @@ typedef struct nr_sdap_entity_s {
   rb_id_t (*sdap_map_ctrl_pdu)(struct nr_sdap_entity_s *entity, rb_id_t pdcp_entity, int map_type, uint8_t dl_qfi);
   void (*sdap_submit_ctrl_pdu)(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
 
-
+  
+  // HakanGulec: DRQL
   void (*dl_enqueue_sdu)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
                     const srb_flag_t srb_flag,
@@ -152,9 +153,10 @@ typedef struct nr_sdap_entity_s {
                     const bool rqi);
 
 
+  // HakanGulec: DRQL
   sdap_sdu_pdu_t *(*dl_dequeue_pdu)(nr_sdap_entity_t *entity,
                     int qfi);
-                    
+
 
   bool (*tx_entity)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
@@ -181,6 +183,9 @@ typedef struct nr_sdap_entity_s {
 
   /* List of entities */
   struct nr_sdap_entity_s *next_entity;
+  
+  // HakanGulec: DRQL
+  pthread_t sdap_e2ap_listener_thread;
 } nr_sdap_entity_t;
 
 /* QFI to DRB Mapping Related Function */
