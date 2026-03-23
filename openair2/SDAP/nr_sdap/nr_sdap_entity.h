@@ -136,6 +136,22 @@ typedef struct nr_sdap_entity_s {
   rb_id_t (*sdap_map_ctrl_pdu)(struct nr_sdap_entity_s *entity, rb_id_t pdcp_entity, int map_type, uint8_t dl_qfi);
   void (*sdap_submit_ctrl_pdu)(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
 
+
+  void (*dl_enqueue_sdu)(struct nr_sdap_entity_s *entity,
+                    protocol_ctxt_t *ctxt_p,
+                    const srb_flag_t srb_flag,
+                    const rb_id_t rb_id,
+                    const mui_t mui,
+                    const confirm_t confirm,
+                    const sdu_size_t sdu_buffer_size,
+                    unsigned char *const sdu_buffer,
+                    const pdcp_transmission_mode_t pt_mode,
+                    const uint32_t *sourceL2Id,
+                    const uint32_t *destinationL2Id,
+                    const uint8_t qfi,
+                    const bool rqi);
+
+
   bool (*tx_entity)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
                     const srb_flag_t srb_flag,
