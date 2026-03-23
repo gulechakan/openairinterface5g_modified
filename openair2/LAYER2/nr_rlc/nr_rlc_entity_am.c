@@ -2064,7 +2064,7 @@ void nr_rlc_entity_am_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
   entity->tx_size -= cur->sdu->size;
 
   // HakanGulec: keep txbuf_occ_bytes synced whenever tx_size decreases
-  LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + sdu_size, entity->tx_size);
+  LOG_D(RLC, "--- Removed SDU %d -> %d\n", entity->tx_size + cur->sdu->size, entity->tx_size);
 
   // DRQL Actual Size (Remaining) for RIC
   entity->common.stats.txbuf_occ_bytes = entity->tx_size;
