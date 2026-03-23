@@ -76,6 +76,49 @@ typedef struct qfi2drb_s {
 
 void nr_pdcp_submit_sdap_ctrl_pdu(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
 
+// HakanGulec: DRQL declarations to avoid compiler errors
+typedef struct nr_sdap_entity_s nr_sdap_entity_t;
+typedef struct sdap_sdu_s sdap_sdu_pdu_t;
+typedef struct sdap_sdu_queue_s sdap_sdu_queue_t;
+
+
+typedef struct sdap_sdu_s {
+  nr_sdap_entity_t *entity;
+  protocol_ctxt_t *ctxt_p;
+  srb_flag_t srb_flag;
+  rb_id_t rb_id;
+  mui_t mui;
+  confirm_t confirm;
+  sdu_size_t sdu_buffer_size;
+  unsigned char *sdu_buffer;
+  pdcp_transmission_mode_t pt_mode;
+  uint32_t *sourceL2Id;
+  uint32_t *destinationL2Id;
+  uint8_t qfi;
+  bool rqi;
+  
+
+  clock_t enqueue_time;
+  clock_t dequeue_time;
+  struct sdap_sdu_s *nxt;
+  struct sdap_sdu_s *prv;
+} sdap_sdu_pdu_t;
+
+
+typedef struct sdap_sdu_queue_s {
+  sdap_sdu_pdu_t *head;  
+  sdap_sdu_pdu_t *tail;
+  volatile int tx_sdu_bytes; // Downlink received SDUs in bytes 
+  volatile int tx_pdu_bytes; // Downlink transmitted PDUs in bytes
+  volatile int length; // In packets
+  volatile int size; // In Bytes
+  volatile bool enabled; // Once at least one SDU is added here the queue is active for statistics 
+  volatile long long current_time_ms; // To measure TX throughput
+  volatile long long tx_pdu_bytes_per_interval; // To measure TX throughput, resets when current_time_ms is set
+
+  pthread_mutex_t lock;
+} sdap_sdu_queue_t;
+
 typedef struct nr_sdap_entity_s {
   ue_id_t ue_id;
   rb_id_t default_drb;
