@@ -152,6 +152,10 @@ typedef struct nr_sdap_entity_s {
                     const bool rqi);
 
 
+  sdap_sdu_pdu_t *(*dl_dequeue_pdu)(nr_sdap_entity_t *entity,
+                    int qfi);
+                    
+
   bool (*tx_entity)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
                     const srb_flag_t srb_flag,
