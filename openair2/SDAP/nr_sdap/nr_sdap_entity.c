@@ -29,11 +29,18 @@
 #include <string.h>
 #include <pthread.h>
 
-typedef struct {
-  nr_sdap_entity_t *sdap_entity_llist;
-} nr_sdap_entity_info;
+// typedef struct {
+//   nr_sdap_entity_t *sdap_entity_llist;
+// } nr_sdap_entity_info;
 
-static nr_sdap_entity_info sdap_info;
+// HakanGulec: DRQL
+nr_sdap_entity_info sdap_info;
+
+long long get_time_in_ms(){
+  struct timeval current_time;
+  gettimeofday(&current_time, NULL);
+  return current_time.tv_sec * 1000LL + current_time.tv_usec / 1000;
+}
 
 instance_t *N3GTPUInst = NULL;
 
@@ -83,6 +90,123 @@ void nr_pdcp_submit_sdap_ctrl_pdu(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_s
   LOG_D(SDAP, "QFI: %u\n R: %u\n D/C: %u\n", ctrl_pdu.QFI, ctrl_pdu.R, ctrl_pdu.DC);
   return;
 }
+
+// HakanGulec: DRQL
+// Create SDU and append to SDAP entity's queue. This function is thread safe.
+void nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
+                              protocol_ctxt_t *ctxt_p,
+                              const srb_flag_t srb_flag,
+                              const rb_id_t rb_id,
+                              const mui_t mui,
+                              const confirm_t confirm,
+                              const sdu_size_t sdu_buffer_size,
+                              unsigned char *const sdu_buffer,
+                              const pdcp_transmission_mode_t pt_mode,
+                              const uint32_t *sourceL2Id,
+                              const uint32_t *destinationL2Id,
+                              const uint8_t qfi,
+                              const bool rqi){
+
+  sdap_sdu_pdu_t *sdap_sdu = (sdap_sdu_pdu_t *) malloc(sizeof(sdap_sdu_pdu_t));
+  assert(sdap_sdu != NULL);
+
+  int qfi_index = qfi;
+
+  sdap_sdu->entity = entity;
+  sdap_sdu->ctxt_p = ctxt_p;
+  sdap_sdu->srb_flag = srb_flag;
+  sdap_sdu->rb_id = rb_id;
+  sdap_sdu->mui = mui;
+  sdap_sdu->confirm = confirm;
+  sdap_sdu->sdu_buffer_size = sdu_buffer_size;
+  sdap_sdu->sdu_buffer = sdu_buffer;
+  sdap_sdu->pt_mode = pt_mode;
+  sdap_sdu->sourceL2Id = sourceL2Id;
+  sdap_sdu->destinationL2Id = destinationL2Id;
+  sdap_sdu->qfi = qfi;
+  sdap_sdu->rqi = rqi;
+
+  sdap_sdu->enqueue_time = clock();
+  sdap_sdu->nxt = NULL;
+
+  // **************** PDR Based on Packet Size **************** //
+  if(sdu_buffer_size < 100){
+    qfi_index = 0;
+  }
+  else {
+    qfi_index = 1;
+  }
+   
+  // Lock
+  pthread_mutex_lock(&entity->sdap_sdu_pdu_queues[qfi_index].lock);
+
+  if(!entity->sdap_sdu_pdu_queues[qfi_index].head){
+    entity->sdap_sdu_pdu_queues[qfi_index].head = sdap_sdu;
+    sdap_sdu->prv = NULL;
+  }
+  else {
+    sdap_sdu->prv = entity->sdap_sdu_pdu_queues[qfi_index].tail;
+    entity->sdap_sdu_pdu_queues[qfi_index].tail->nxt = sdap_sdu;
+  }
+
+  entity->sdap_sdu_pdu_queues[qfi_index].tail = sdap_sdu;
+
+  
+  // Compute TX throughput
+  if(!entity->sdap_sdu_pdu_queues[qfi_index].length){
+    entity->sdap_sdu_pdu_queues[qfi_index].current_time_ms = get_time_in_ms();
+    entity->sdap_sdu_pdu_queues[qfi_index].tx_pdu_bytes_per_interval = 0;
+  }
+
+  entity->sdap_sdu_pdu_queues[qfi_index].length++;
+  entity->sdap_sdu_pdu_queues[qfi_index].size += sdu_buffer_size;
+  entity->sdap_sdu_pdu_queues[qfi_index].tx_sdu_bytes += sdu_buffer_size;
+  entity->sdap_sdu_pdu_queues[qfi_index].enabled = true;
+  
+  LOG_D(SDAP, "Enqueued SDU at queue %d with current length %d and size %d\n", qfi_index, entity->sdap_sdu_pdu_queues[qfi_index].length, entity->sdap_sdu_pdu_queues[qfi_index].size);
+
+  // Unlock
+  pthread_mutex_unlock(&entity->sdap_sdu_pdu_queues[qfi_index].lock);
+}
+
+
+// This function is NOT thread safe. Thus, locking outside is required. This is 
+// attributed to the fact that multiple checks on the queue must be performed before
+// dequeuing. 
+// Note: When enqueueing NO checks are performed and thats why the 
+// nr_sdap_dl_enqueue_sdu() is thread safe.
+sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, int qfi){
+  sdap_sdu_pdu_t *pdu;
+
+  pdu = entity->sdap_sdu_pdu_queues[qfi].head; 
+
+  entity->sdap_sdu_pdu_queues[qfi].head = entity->sdap_sdu_pdu_queues[qfi].head->nxt;
+
+  if(!entity->sdap_sdu_pdu_queues[qfi].head){
+    entity->sdap_sdu_pdu_queues[qfi].tail = NULL;
+  }
+  else {
+    entity->sdap_sdu_pdu_queues[qfi].head->prv = NULL;
+  }
+
+  entity->sdap_sdu_pdu_queues[qfi].length--;
+  entity->sdap_sdu_pdu_queues[qfi].size -= pdu->sdu_buffer_size;
+  entity->sdap_sdu_pdu_queues[qfi].tx_pdu_bytes += pdu->sdu_buffer_size;
+
+  // Compute TX throughput
+  entity->sdap_sdu_pdu_queues[qfi].tx_pdu_bytes_per_interval += pdu->sdu_buffer_size;
+
+
+  pdu->dequeue_time = clock();
+
+  LOG_D(SDAP, "Dequeued PDU from queue %d with current length %d and size %d after %f\n", qfi, entity->sdap_sdu_pdu_queues[qfi].length, entity->sdap_sdu_pdu_queues[qfi].size, ((double) (pdu->dequeue_time - pdu->enqueue_time)) / CLOCKS_PER_SEC);
+
+  pdu->nxt = NULL;
+  pdu->prv = NULL;
+
+  return pdu;
+}
+
 
 static bool nr_sdap_tx_entity(nr_sdap_entity_t *entity,
                               protocol_ctxt_t *ctxt_p,

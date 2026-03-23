@@ -17,7 +17,7 @@
 #define SDAP_RLC_INDICATION_REQUEST 0
 
 // Responses
-#define SDAP_RLC_INDICATION_REQUEST 10
+#define SDAP_RLC_INDICATION_RESPONSE 10
 
 
 typedef struct sdap_rlc_response_s {

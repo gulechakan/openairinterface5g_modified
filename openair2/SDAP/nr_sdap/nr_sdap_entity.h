@@ -136,7 +136,7 @@ typedef struct nr_sdap_entity_s {
   rb_id_t (*sdap_map_ctrl_pdu)(struct nr_sdap_entity_s *entity, rb_id_t pdcp_entity, int map_type, uint8_t dl_qfi);
   void (*sdap_submit_ctrl_pdu)(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
 
-  
+
   // HakanGulec: DRQL
   void (*dl_enqueue_sdu)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
@@ -281,5 +281,17 @@ bool is_sdap_tx(bool is_gnb, NR_SDAP_Config_t *sdap_config);
  * @param[in] ue_id     Unique identifier for the User Equipment. ID Range [0, 65536].
  */
 void nr_reconfigure_sdap_entity(NR_SDAP_Config_t *sdap_config, ue_id_t ue_id, int pdusession_id, int drb_id);
+
+
+// HakanGulec: DRQL Used for scheduling purposes
+typedef struct {
+  nr_sdap_entity_t *sdap_entity_llist;
+} nr_sdap_entity_info;
+
+
+extern nr_sdap_entity_info sdap_info;
+
+
+long long get_time_in_ms();
 
 #endif
