@@ -12,13 +12,13 @@
 #include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
 #include "common/utils/LOG/log.h"
 
-/* Missing umbrella-repo header: local time helper */
-static inline long long get_time_in_ms(void)
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
-}
+// /* Missing umbrella-repo header: local time helper */
+// static inline long long get_time_in_ms(void)
+// {
+//   struct timeval tv;
+//   gettimeofday(&tv, NULL);
+//   return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
+// }
 
 /* DRQL / RIC options (defined here — was only declared in drql_common.h) */
 custom_parameters_t custom_parameters = {
