@@ -82,6 +82,9 @@ typedef struct nr_sdap_entity_s {
   int pdusession_id;
   qfi2drb_t qfi2drb_table[SDAP_MAX_QFI];
 
+  // HakanGulec: DRQL
+  sdap_sdu_queue_t sdap_sdu_pdu_queues[SDAP_MAX_QFI]; // One SDU queue per QFI
+
   void (*qfi2drb_map_update)(struct nr_sdap_entity_s *entity, uint8_t qfi, rb_id_t drb, bool has_sdap_rx, bool has_sdap_tx);
   void (*qfi2drb_map_delete)(struct nr_sdap_entity_s *entity, uint8_t qfi);
   rb_id_t (*qfi2drb_map)(struct nr_sdap_entity_s *entity, uint8_t qfi);
