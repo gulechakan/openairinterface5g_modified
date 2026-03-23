@@ -181,10 +181,12 @@ void *gNB_app_task(void *args_p)
       }
 #endif
 
+      /* Monolithic DRQL: ML prediction receiver (port 9010) not used — enable if you add DRQL_USE_ML_PREDICTIONS + xApp feed.
       if (itti_create_task (TASK_SDAP_GNB, sdap_predictions_receiver, NULL) < 0) {
         LOG_E(GNB_APP, "Create task for SDAP predictions receiver failed\n");
         AssertFatal(1==0,"exiting");
       }
+      */
 
     }
 

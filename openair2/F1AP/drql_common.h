@@ -87,4 +87,4 @@ char *extract_substring_between_patterns(char *string, const char *left_pattern,
 
 #endif
 
-// HakanGulec: Some of them might be unnecessary since they are used for ML predictions.
+// HakanGulec: Some of them might be unnecessary since they are used for ML predictions. This file might not be belong F1AP.

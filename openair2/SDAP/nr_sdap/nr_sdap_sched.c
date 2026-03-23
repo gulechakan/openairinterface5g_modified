@@ -1,14 +1,30 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <unistd.h>
- #include <stdlib.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <stdbool.h>
+
 #include "nr_sdap_entity.h"
 #include "nr_sdap_sched.h"
 #include "openair2/F1AP/drql_common.h"
-#include "openair2/analysis_conf.h"
+#include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
+#include "common/utils/LOG/log.h"
 
+/* Missing umbrella-repo header: local time helper */
+static inline long long get_time_in_ms(void)
+{
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (long long)tv.tv_sec * 1000LL + (long long)tv.tv_usec / 1000LL;
+}
 
-int sequence_number = 0;
+/* DRQL / RIC options (defined here — was only declared in drql_common.h) */
+custom_parameters_t custom_parameters = {
+    .ric_enabled = false,
+    .drql_threshold = 0,
+};
 
 
 
@@ -38,118 +54,73 @@ predictions_t predictions = {0};
 pthread_mutex_t analysis_mutex;
 analysis_t analysis = {0};
 
-
-// Retrieve RLC information from all RLC entities based on a sequence number from openairinterface5g-drql/openair2/F1AP/f1ap_du_interface_management.c (du_handle_plain_text_indication_request())
-void query_sdap_rlc(int socket_fd, int drb, int *limit, int *actual_size){
-  char buffer[REQUEST_SIZE];
-  char response[REQUEST_SIZE];
-  // char *type_str;
-  char *acknowledgement_number_str;
-
-
-  char *limit_str;
-  char *actual_size_str;
-
-  memset(buffer, 0, REQUEST_SIZE * sizeof(char));
-
-  sprintf(buffer + strlen(buffer), "{Type:%d,SEQ:%d,DRB:%d}", SDAP_RLC_INDICATION_REQUEST, sequence_number, drb);
-
-  while(1){
-    // SDAP queries limit and actual size of RLC entities buffers
-    if(write(socket_fd, buffer, sizeof(buffer) * sizeof(char)) < 0){
-      printf("[ERROR] On write() in query_sdap_rlc()\n"); 
-      fflush(stdout);
-      continue;
-    }  
-  
-
-    memset(response, 0, REQUEST_SIZE * sizeof(char));
-    
-    if(read(socket_fd, response, REQUEST_SIZE * sizeof(char)) < 0){
-      printf("READ ERROR\n"); 
-      fflush(stdout);
-      continue;
-    
-    }
-
-    // type_str = extract_substring_between_patterns((char *) response, "{Type:", ",");    
-    acknowledgement_number_str = extract_substring_between_patterns((char *) response, "ACK:", ",");
-
-    // Response still pending
-    if(atoi(acknowledgement_number_str) < sequence_number + 1){
-      continue;
-    }
-
-    // Response received
-    break;
+/**
+ * Monolithic gNB: read DRQL limit and TX occupancy from RLC in-process.
+ * nr_rlc_get_statistics() uses the same DRB index as nr_rlc_add_drb (1..MAX_DRBS).
+ */
+static void query_rlc_local(int ue_id, int drb_id, int *limit, int *actual_size)
+{
+  *limit = -1;
+  *actual_size = -1;
+  if (drb_id < 1 || drb_id > 5) {
+    return;
   }
-
-  // Handling ONE UE with ONE DRB at this implementation this must be improved
-  // to parse data from string and easily process. This is the MVP implementation
-  // Mapping of SDAP entities (QFIs) to RLC (DRBs) must also be handled later on 
-  limit_str = extract_substring_between_patterns(response, "tx_maxsize:", ",");
-  *limit = atoi(limit_str);
-  
-  actual_size_str = extract_substring_between_patterns(response, "tx_size:", "}");
-  *actual_size = atoi(actual_size_str);
-  // ********************************************************************************************************//
-
-  sequence_number++;
+  nr_rlc_statistics_t st = {0};
+  if (!nr_rlc_get_statistics(ue_id, 0, drb_id, &st)) {
+    return;
+  }
+  *limit = (int)st.txpdu_status_bytes;
+  *actual_size = (int)st.txbuf_occ_bytes;
 }
 
-
-int minimum(int a, int b) {
+int minimum(int a, int b)
+{
   return (a < b) ? a : b;
 }
 
-void rlc_information(int socket_fd, int testing_socket_fd, int drb, int *real_limit, int *limit, int *real_actual_size, int *actual_size){
-  *limit = -1;
+/**
+ * DRQL pacing: fill limit / actual_size from local RLC.
+ * Optional ML path (umbrella CU/DU) is disabled by default; enable only with DRQL_USE_ML_PREDICTIONS.
+ */
+void rlc_information(int ue_id,
+                     int drb_id,
+                     int *real_limit,
+                     int *limit,
+                     int *real_actual_size,
+                     int *actual_size)
+{
   *real_limit = -1;
-
-  *actual_size = -1;
   *real_actual_size = -1;
-
-  int slope;
-  int intercept;
-  long double current_time_in_milliseconds;
-
-  // No Predictions or RIC is Disabled (CU/DU Direct Communication)
-  if(!predictions.actual_size_array_length || !custom_parameters.ric_enabled){
-    LOG_E(SDAP, "DRQL no predictions or RIC is disabled query RLC from SDAP\n");
-    query_sdap_rlc(socket_fd, drb, limit, actual_size);
-    return;
-  }
-
-  current_time_in_milliseconds = get_time_in_ms(); 
-
-  pthread_mutex_lock(&predictions_mutex);
-  int prediction_index = (int) (current_time_in_milliseconds - predictions.timestamp);
-  prediction_index = prediction_index > predictions.actual_size_array_length - 2 ? -1 : prediction_index; // -2 to exclude the last element, since we can not interpolate there
-  printf("+++ Index %d\n", prediction_index);
-  if(prediction_index < 0){
-    pthread_mutex_unlock(&predictions_mutex);
-    return;
-  }
-  
-  // Actual Size
-  slope = predictions.actual_size_array[prediction_index + 1] - predictions.actual_size_array[prediction_index]; 
-  intercept = predictions.actual_size_array[prediction_index];
-  *actual_size = (int) ((current_time_in_milliseconds - (predictions.timestamp + prediction_index)) * slope + intercept);
-  LOG_I(SDAP, "Actual Size %d from %d and %d on index %d\n", *actual_size, predictions.actual_size_array[prediction_index], predictions.actual_size_array[prediction_index + 1], prediction_index);
-
-  if(*actual_size < 0){
-    *actual_size = 0;
-  }
-  
+  query_rlc_local(ue_id, drb_id, limit, actual_size);
 
 #ifdef SDAP_STATS_PERSIST
-    // Do not add latency in this case
-    query_sdap_rlc(testing_socket_fd, drb, real_limit, real_actual_size);
+  if (*limit >= 0 && *actual_size >= 0) {
+    *real_limit = *limit;
+    *real_actual_size = *actual_size;
+  }
 #endif
 
-  pthread_mutex_unlock(&predictions_mutex);
+#if defined(DRQL_USE_ML_PREDICTIONS)
+  if (predictions.actual_size_array_length > 0 && custom_parameters.ric_enabled) {
+    long double current_time_in_milliseconds = get_time_in_ms();
+    pthread_mutex_lock(&predictions_mutex);
+    int prediction_index = (int)(current_time_in_milliseconds - predictions.timestamp);
+    prediction_index =
+        prediction_index > predictions.actual_size_array_length - 2 ? -1 : prediction_index;
+    if (prediction_index >= 0 && predictions.actual_size_array != NULL) {
+      int slope = predictions.actual_size_array[prediction_index + 1] - predictions.actual_size_array[prediction_index];
+      int intercept = predictions.actual_size_array[prediction_index];
+      *actual_size = (int)((current_time_in_milliseconds - (predictions.timestamp + prediction_index)) * slope
+                           + intercept);
+      if (*actual_size < 0) {
+        *actual_size = 0;
+      }
+    }
+    pthread_mutex_unlock(&predictions_mutex);
+  }
+#endif
 
-  LOG_D(SDAP, "Predicted Limit %d and Actual Size %d\n", *limit, *actual_size);
+  LOG_D(SDAP, "[DRQL] ue_id=%d drb_id=%d limit=%d actual=%d\n", ue_id, drb_id, *limit, *actual_size);
 }
 
 
@@ -316,53 +287,18 @@ void *sdap_analysis(void *arguments){
 }
 
 
-void *sdap_dl_scheduler(void *arguments){
-  // Response int fields
+void *sdap_dl_scheduler(void *arguments)
+{
+  (void)arguments;
   int limit;
   int actual_size;
+  int real_limit;
+  int real_actual_size;
+  sdap_sdu_pdu_t *sdap_pdu;
 
-  int real_limit; // When compare predictions to the real limit
-  int real_actual_size; // When compare predictions to the real actual size
+  LOG_I(SDAP, "[DRQL] sdap_dl_scheduler: monolithic mode (in-process RLC, no CU/DU sockets)\n");
 
-  sdap_sdu_pdu_t *sdap_pdu; 
-
-	int socket_fd;
-  int testing_socket_fd;
- 	struct sockaddr_in servaddr;
- 	struct sockaddr_in testing_servaddr;
-
-	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-	assert(socket_fd != -1);
-  
-	testing_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-	assert(testing_socket_fd != -1);
-
-  int reuse = 1;
-  assert(setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) != -1);
-  assert(setsockopt(testing_socket_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) != -1);
-
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	servaddr.sin_port = htons(8060);
-  assert((bind(socket_fd, (struct sockaddr *) &servaddr, sizeof(servaddr))) != -1);
-	
-  servaddr.sin_port = htons(8080);
-  while(connect(socket_fd, (struct sockaddr *) &servaddr, sizeof(servaddr)) != 0);
-  LOG_E(SDAP, "[DRQL]: Connected to latency socket 8060 (CU) -> 8080 (DU)\n");
-
-
-  bzero(&testing_servaddr, sizeof(testing_servaddr));
-	testing_servaddr.sin_family = AF_INET;
-	testing_servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-	testing_servaddr.sin_port = htons(8070);
-  assert((bind(testing_socket_fd, (struct sockaddr *) &testing_servaddr, sizeof(testing_servaddr))) != -1);
-	
-  testing_servaddr.sin_port = htons(8090);
-  while(connect(testing_socket_fd, (struct sockaddr *) &testing_servaddr, sizeof(testing_servaddr)) != 0);
-  LOG_E(SDAP, "[DRQL]: Connected to no-latency socket 8070 (CU) -> 8090 (DU)\n");
-
-  // Wait till at least one SDAP entity is available
+  /* Wait till at least one SDAP entity is available */
   while (!sdap_info.sdap_entity_llist){
     sleep(1);
   }
@@ -387,9 +323,10 @@ void *sdap_dl_scheduler(void *arguments){
         }
 
         long long start = get_time_in_ms();
-        rlc_information(socket_fd, testing_socket_fd, sdap_entity->qfi2drb_table[sdap_entity->sdap_sdu_pdu_queues[qfi].tail->qfi].drb_id, &real_limit, &limit, &real_actual_size, &actual_size);
-        if((limit < 0 || actual_size < 0) && real_limit < 0){
-          break; // Give priority to lower qfi (replace with continue if RR)
+        const int drb_id = (int)sdap_entity->qfi2drb_table[sdap_entity->sdap_sdu_pdu_queues[qfi].tail->qfi].drb_id;
+        rlc_information((int)sdap_entity->ue_id, drb_id, &real_limit, &limit, &real_actual_size, &actual_size);
+        if (limit < 0 || actual_size < 0) {
+          continue;
         }
         long long end = get_time_in_ms();
         LOG_I(SDAP, "[DRQL]: RLC Limit(Bytes): %d, RLC Actual Size(Bytes): %d, Duration (ms): %lld, SDAP[QFI=%d] Size(Bytes): %d\n", limit, actual_size, end - start, qfi, sdap_entity->sdap_sdu_pdu_queues[qfi].size);
