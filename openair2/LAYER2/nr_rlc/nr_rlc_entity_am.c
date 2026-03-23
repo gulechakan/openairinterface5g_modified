@@ -30,6 +30,9 @@
 #include "common/utils/time_stat.h"
 #include "common/utils/assertions.h"
 
+// HakanGulec: include platform constants
+#include "common/platform_constants.h"
+
 /* for a given SDU/SDU segment, computes the corresponding PDU header size */
 static int compute_pdu_header_size(nr_rlc_entity_am_t *entity,
                                    nr_rlc_sdu_segment_t *sdu)
@@ -760,6 +763,46 @@ lists_over:
           entity->common.sdu_successful_delivery_data,
           (nr_rlc_entity_t *)entity, upper_layer_id);
     }
+  }
+
+  // HakanGulec
+  // DRQL: This part is a bit off. The generate_tx_pdu is called by the 
+  // scheduler multiple times for different UEs but only once for a UE.
+  // This if multiple UEs this function will be called multiple times
+  // each TTI, once for each UE. In my implementation this does not 
+  // impose a huge problem since I am testing with only one UE.
+  // In future implementations this must change.
+  
+  LOG_D(RLC, "[DRQL][Statistics] limit: %d, actual: %d\n", entity->common.stats.txpdu_status_bytes, entity->common.stats.txbuf_occ_bytes);
+
+  // For Debugging: This part my need a fix
+  bool buffer_starved = entity->drql_limit_reached && !entity->common.stats.txbuf_occ_bytes;
+  if(buffer_starved){
+    int previous_tx_maxsize = entity->common.stats.txpdu_status_bytes;
+    int next_tx_maxsize = (int)(entity->common.stats.txpdu_status_bytes * 10);
+
+    entity->common.stats.txpdu_status_bytes = (RLC_TX_MAXSIZE < next_tx_maxsize) ? RLC_TX_MAXSIZE : next_tx_maxsize; 
+    LOG_E(RLC, "[DRQL][Buffer Starved] limit: %d -> %d, actual: %d\n", previous_tx_maxsize, entity->common.stats.txpdu_status_bytes, entity->tx_size);
+
+    // Reset drql_limit_reached value to avoid increasing the rlc_buffer more than necessary
+    // entity->drql_limit_reached = false;
+  }
+  else if(entity->common.stats.txbuf_occ_bytes > 0){
+    // Reducing the limit exactly to not drop tailing packets  
+    // Ex. limit = 10, actual_size = 8 -> 10 - 8 = 2 < 8 -> limit can not become 2 since packets must be dropped thus becomes 8 forcing the SDAP to not forward packets
+    if(entity->common.stats.txpdu_status_bytes - entity->common.stats.txbuf_occ_bytes < entity->common.stats.txbuf_occ_bytes){
+      LOG_I(RLC, "[DRQL][Remaining][NoFit] limit: %d -> %d, actual: %d\n", entity->common.stats.txpdu_status_bytes, entity->common.stats.txbuf_occ_bytes, entity->common.stats.txbuf_occ_bytes);
+      entity->common.stats.txpdu_status_bytes = entity->common.stats.txbuf_occ_bytes;
+    }
+    // Reducing the limit will definitely not drop tailing packets  
+    // Ex. limit = 10, actual_size = 2 -> 10 - 2 = 8 >= 2 -> limit can become 8
+    else {
+      LOG_I(RLC, "[DRQL][Remaining][Fit] limit: %d -> %d, actual: %d\n", entity->common.stats.txpdu_status_bytes, entity->common.stats.txpdu_status_bytes - entity->common.stats.txbuf_occ_bytes, entity->common.stats.txbuf_occ_bytes);
+      entity->common.stats.txpdu_status_bytes = entity->common.stats.txpdu_status_bytes - entity->common.stats.txbuf_occ_bytes;
+    }
+    
+    // Reset drql_limit_reached value to avoid increasing the rlc_buffer more than necessary
+    entity->drql_limit_reached = false;
   }
 
   new_retransmit_list->next = cur_retransmit_list;
