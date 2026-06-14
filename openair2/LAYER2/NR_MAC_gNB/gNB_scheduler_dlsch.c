@@ -36,6 +36,8 @@
 #include "NR_MAC_COMMON/nr_mac_extern.h"
 #include "LAYER2/NR_MAC_gNB/mac_proto.h"
 #include "LAYER2/RLC/rlc.h"
+#include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
+#include "openair2/analysis_conf.h"
 
 /*TAG*/
 #include "NR_TAG-Id.h"
@@ -44,6 +46,12 @@
 #include "executables/softmodem-common.h"
 #include "../../../nfapi/oai_integration/vendor_ext.h"
 
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+
 ////////////////////////////////////////////////////////
 /////* DLSCH MAC PDU generation (6.1.2 TS 38.321) */////
 ////////////////////////////////////////////////////////
@@ -51,6 +59,32 @@
 #define HALFWORD 16
 #define WORD 32
 //#define SIZE_OF_POINTER sizeof (void *)
+
+#ifdef RLC_STATS_PERSIST
+static FILE *get_rlc_analysis_fp(void)
+{
+  static FILE *fp;
+  static bool initialized;
+
+  if (initialized)
+    return fp;
+
+  initialized = true;
+  const char *path = getenv("OAI_RLC_STATS_FILE");
+  if (path == NULL || path[0] == '\0')
+    path = "rlc_analysis.csv";
+
+  fp = fopen(path, "w");
+  if (fp == NULL) {
+    LOG_E(NR_MAC, "Could not open RLC stats file %s: %s\n", path, strerror(errno));
+    return NULL;
+  }
+
+  fprintf(fp, "time_ms,rnti,lcid,txbuf_occ_bytes,txpdu_status_bytes\n");
+  fflush(fp);
+  return fp;
+}
+#endif
 
 int get_dl_tda(const gNB_MAC_INST *nrmac, const NR_ServingCellConfigCommon_t *scc, int slot)
 {
@@ -1315,6 +1349,12 @@ void nr_schedule_ue_spec(module_id_t module_id,
       int sdus = 0;
 
       if (sched_ctrl->sliceInfo[sched_ctrl->last_sched_slice].num_total_bytes > 0) {
+#ifdef RLC_STATS_PERSIST
+        FILE *rlc_analysis_fp = get_rlc_analysis_fp();
+        struct timeval rlc_stats_time;
+        gettimeofday(&rlc_stats_time, NULL);
+        const long long rlc_stats_time_ms = rlc_stats_time.tv_sec * 1000LL + rlc_stats_time.tv_usec / 1000;
+#endif
         /* loop over all activated logical channels in this slice */
         NR_List_Iterator(&sched_ctrl->sliceInfo[sched_ctrl->last_sched_slice].lcid, lcidP)
         {
@@ -1369,6 +1409,10 @@ void nr_schedule_ue_spec(module_id_t module_id,
           }
 
           UE->mac_stats.dl.lc_bytes[lcid] += lcid_bytes;
+#ifdef RLC_STATS_PERSIST
+          if (rlc_analysis_fp != NULL)
+            write_rlc_stats(rlc_analysis_fp, rnti, lcid, rlc_stats_time_ms);
+#endif
         }
         sched_ctrl->harq_slice_map[sched_ctrl->sched_pdsch.dl_harq_pid] = sched_ctrl->last_sched_slice;
       } else if (get_softmodem_params()->phy_test || get_softmodem_params()->do_ra) {

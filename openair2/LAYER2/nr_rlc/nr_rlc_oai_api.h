@@ -37,6 +37,7 @@
 #include "openair2/RRC/NR/nr_rrc_proto.h"
 #include "nr_rlc_ue_manager.h"
 
+#include <stdio.h>
 
 struct NR_RLC_Config;
 struct NR_LogicalChannelConfig;
@@ -69,3 +70,5 @@ bool nr_rlc_activate_srb0(int ue_id,
                           void (*send_initial_ul_rrc_message)(int rnti, const uint8_t *sdu, sdu_size_t sdu_len, void *data));
 
 bool nr_rlc_get_statistics(int ue_id, int srb_flag, int rb_id, nr_rlc_statistics_t *out);
+
+void write_rlc_stats(FILE *fp, rnti_t rnti, logical_chan_id_t lcid, long long time_ms);

@@ -147,6 +147,34 @@ static nr_rlc_entity_t *get_rlc_entity_from_lcid(nr_rlc_ue_t *ue, logical_chan_i
   }
 }
 
+void write_rlc_stats(FILE *fp, rnti_t rnti, logical_chan_id_t lcid, long long time_ms)
+{
+  if (fp == NULL)
+    return;
+
+  nr_rlc_statistics_t rlc_stats;
+  memset(&rlc_stats, 0, sizeof(rlc_stats));
+
+  nr_rlc_manager_lock(nr_rlc_ue_manager);
+  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, rnti);
+  nr_rlc_entity_t *rb = ue != NULL ? get_rlc_entity_from_lcid(ue, lcid) : NULL;
+  if (rb != NULL)
+    rb->get_stats(rb, &rlc_stats);
+  nr_rlc_manager_unlock(nr_rlc_ue_manager);
+
+  if (rb == NULL)
+    return;
+
+  fprintf(fp,
+          "%lld,%d,%d,%d,%d\n",
+          time_ms,
+          rnti,
+          lcid,
+          rlc_stats.txbuf_occ_bytes,
+          rlc_stats.txpdu_status_bytes);
+  fflush(fp);
+}
+
 void nr_rlc_release_entity(int ue_id, logical_chan_id_t channel_id)
 {
   nr_rlc_manager_lock(nr_rlc_ue_manager);
