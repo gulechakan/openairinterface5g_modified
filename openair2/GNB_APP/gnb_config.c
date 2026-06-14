@@ -1422,6 +1422,14 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
         AssertFatal(1 == 0, "MACRLC %d: %s unknown southbound midhaul\n", j, *(MacRLC_ParamList.paramarray[j][MACRLC_TRANSPORT_S_PREFERENCE_IDX].strptr));
       }
       RC.nrmac[j]->ulsch_max_frame_inactivity = *(MacRLC_ParamList.paramarray[j][MACRLC_ULSCH_MAX_FRAME_INACTIVITY].uptr);
+      RC.nrmac[j]->drql_enable = *MacRLC_ParamList.paramarray[j][MACRLC_DRQL_ENABLE_IDX].u8ptr != 0;
+      RC.nrmac[j]->sdap_drql_enable = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_ENABLE_IDX].u8ptr != 0;
+      RC.nrmac[j]->sdap_drql_max_queue_bytes = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES_IDX].uptr;
+      LOG_I(NR_MAC,
+            "DRQL config: RLC %s, SDAP %s, SDAP max queue %u bytes\n",
+            RC.nrmac[j]->drql_enable ? "enabled" : "disabled",
+            RC.nrmac[j]->sdap_drql_enable ? "enabled" : "disabled",
+            RC.nrmac[j]->sdap_drql_max_queue_bytes);
       NR_bler_options_t *dl_bler_options = &RC.nrmac[j]->dl_bler;
       dl_bler_options->upper = *(MacRLC_ParamList.paramarray[j][MACRLC_DL_BLER_TARGET_UPPER_IDX].dblptr);
       dl_bler_options->lower = *(MacRLC_ParamList.paramarray[j][MACRLC_DL_BLER_TARGET_LOWER_IDX].dblptr);

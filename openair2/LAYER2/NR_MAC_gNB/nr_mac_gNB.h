@@ -970,6 +970,12 @@ typedef struct gNB_MAC_INST_s {
 
   /// maximum number of slots before a UE will be scheduled ULSCH automatically
   uint32_t ulsch_max_frame_inactivity;
+  /// DRQL RLC admission control gate; disabled by default
+  bool drql_enable;
+  /// SDAP DRQL queueing/pacing gate; disabled by default
+  bool sdap_drql_enable;
+  /// Maximum bytes held by SDAP DRQL queues
+  uint32_t sdap_drql_max_queue_bytes;
 
   /// DL preprocessor for differentiated scheduling
   nr_pp_impl_param_dl_t pre_processor_dl;

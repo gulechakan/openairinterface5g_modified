@@ -75,6 +75,9 @@
 #define CONFIG_STRING_MACRLC_ANALOG_BEAMFORMING            "set_analog_beamforming"
 #define CONFIG_STRING_MACRLC_BEAM_DURATION                 "beam_duration"
 #define CONFIG_STRING_MACRLC_BEAMS_PERIOD                  "beams_per_period"
+#define CONFIG_STRING_MACRLC_DRQL_ENABLE                   "drql_enable"
+#define CONFIG_STRING_MACRLC_SDAP_DRQL_ENABLE              "sdap_drql_enable"
+#define CONFIG_STRING_MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES     "sdap_drql_max_queue_bytes"
 
 #define HLP_MACRLC_UL_PRBBLACK "SNR threshold to decide whether a PRB will be blacklisted or not"
 #define HLP_MACRLC_DL_BLER_UP "Upper threshold of BLER to decrease DL MCS"
@@ -91,6 +94,9 @@
 #define HLP_MACRLC_AB "Flag to enable analog beamforming"
 #define HLP_MACRLC_BEAM_DURATION "number of consecutive slots for a given set of beams"
 #define HLP_MACRLC_BEAMS_PERIOD "set of beams that can be simultaneously allocated in a period"
+#define HLP_MACRLC_DRQL_ENABLE "Flag to enable Dynamic RLC Queue Limit admission control"
+#define HLP_MACRLC_SDAP_DRQL_ENABLE "Flag to enable SDAP queueing and pacing using DRQL RLC status"
+#define HLP_MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES "Maximum bytes held by the SDAP DRQL queue"
 
 /*-------------------------------------------------------------------------------------------------------------------------------------------------------*/
 /*                                            MacRLC  configuration parameters                                                                           */
@@ -136,6 +142,9 @@
   {CONFIG_STRING_MACRLC_ANALOG_BEAMFORMING,          HLP_MACRLC_AB,            PARAMFLAG_BOOL, .u8ptr=NULL, .defintval=0,   TYPE_UINT8,   0}, \
   {CONFIG_STRING_MACRLC_BEAM_DURATION,               HLP_MACRLC_BEAM_DURATION, 0, .u8ptr=NULL,  .defintval=1,               TYPE_UINT8,   0}, \
   {CONFIG_STRING_MACRLC_BEAMS_PERIOD,                HLP_MACRLC_BEAMS_PERIOD,  0, .u8ptr=NULL,  .defintval=1,               TYPE_UINT8,   0}, \
+  {CONFIG_STRING_MACRLC_DRQL_ENABLE,                 HLP_MACRLC_DRQL_ENABLE,   PARAMFLAG_BOOL, .u8ptr=NULL, .defintval=0,   TYPE_UINT8,   0}, \
+  {CONFIG_STRING_MACRLC_SDAP_DRQL_ENABLE,            HLP_MACRLC_SDAP_DRQL_ENABLE, PARAMFLAG_BOOL, .u8ptr=NULL, .defintval=0, TYPE_UINT8,   0}, \
+  {CONFIG_STRING_MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES,   HLP_MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES, 0, .uptr=NULL, .defintval=16777216, TYPE_UINT, 0}, \
 }
 // clang-format off
 
@@ -177,6 +186,9 @@
 #define MACRLC_ANALOG_BEAMFORMING_IDX                          35
 #define MACRLC_ANALOG_BEAM_DURATION_IDX                        36
 #define MACRLC_ANALOG_BEAMS_PERIOD_IDX                         37
+#define MACRLC_DRQL_ENABLE_IDX                                 38
+#define MACRLC_SDAP_DRQL_ENABLE_IDX                            39
+#define MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES_IDX                   40
 
 #define MACRLCPARAMS_CHECK { \
   { .s5 = { NULL } }, \
@@ -216,6 +228,9 @@
   { .s2 = { NULL } }, \
   { .s5 = { NULL } }, \
   { .s5 = { NULL } }, \
+  { .s5 = { NULL } }, \
+  { .s2 = { NULL } }, \
+  { .s2 = { NULL } }, \
   { .s5 = { NULL } }, \
 }
 
