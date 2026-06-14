@@ -3,6 +3,7 @@ add_library(nr_rlc_core OBJECT
             nr_rlc_entity_am.c
             nr_rlc_entity_tm.c
             nr_rlc_entity_um.c
+            nr_rlc_drql.c
             nr_rlc_pdu.c
             nr_rlc_sdu.c)
 target_include_directories(nr_rlc_core PRIVATE ../../..)
