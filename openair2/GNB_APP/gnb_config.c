@@ -42,6 +42,7 @@
 #include "MACRLC_nr_paramdef.h"
 #include "gnb_paramdef.h"
 #include "NR_MAC_gNB/mac_proto.h"
+#include "LAYER2/nr_rlc/nr_rlc_drql.h"
 #include "RRC/NR/nr_rrc_extern.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #ifdef ENABLE_AERIAL
@@ -1423,6 +1424,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
       }
       RC.nrmac[j]->ulsch_max_frame_inactivity = *(MacRLC_ParamList.paramarray[j][MACRLC_ULSCH_MAX_FRAME_INACTIVITY].uptr);
       RC.nrmac[j]->drql_enable = *MacRLC_ParamList.paramarray[j][MACRLC_DRQL_ENABLE_IDX].u8ptr != 0;
+      nr_rlc_drql_set_enabled(RC.nrmac[j]->drql_enable);
       RC.nrmac[j]->sdap_drql_enable = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_ENABLE_IDX].u8ptr != 0;
       RC.nrmac[j]->sdap_drql_max_queue_bytes = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES_IDX].uptr;
       LOG_I(NR_MAC,
