@@ -1429,7 +1429,8 @@ static int generate_status(nr_rlc_entity_am_t *entity, char *buffer, int size)
   entity->common.stats.txpdu_pkts++;
   entity->common.stats.txpdu_bytes += encoder.byte;
   entity->common.stats.txpdu_status_pkts++;
-  entity->common.stats.txpdu_status_bytes += encoder.byte;
+  if (!nr_rlc_drql_is_enabled())
+    entity->common.stats.txpdu_status_bytes += encoder.byte;
 
   return encoder.byte;
 }
