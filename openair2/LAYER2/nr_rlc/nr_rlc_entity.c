@@ -101,6 +101,7 @@ nr_rlc_entity_t *new_nr_rlc_entity_am(
   }
 
   ret->tx_maxsize = tx_maxsize;
+  ret->common.stats.txpdu_status_bytes = ret->tx_maxsize;
   ret->rx_maxsize = rx_maxsize;
 
   ret->t_poll_retransmit  = t_poll_retransmit;
