@@ -144,6 +144,8 @@ nr_rlc_entity_t *new_nr_rlc_entity_am(
    */
   ret->common.txsdu_avg_time_to_tx = time_average_new(100 * 1000, 1024);
 
+  ret->drql_limit_reached = false;
+
   return (nr_rlc_entity_t *)ret;
 }
 
