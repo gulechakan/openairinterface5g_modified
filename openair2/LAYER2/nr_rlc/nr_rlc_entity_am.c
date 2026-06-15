@@ -50,6 +50,44 @@ static void nr_rlc_entity_am_drql_sync_txbuf_occ(nr_rlc_entity_am_t *entity)
     entity->common.stats.txbuf_occ_bytes = entity->tx_size;
 }
 
+static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
+{
+  if (!nr_rlc_drql_is_enabled())
+    return;
+
+  uint32_t limit = entity->common.stats.txpdu_status_bytes;
+  uint32_t actual = entity->common.stats.txbuf_occ_bytes;
+
+  LOG_D(RLC, "[DRQL][Statistics] limit: %u, actual: %u\n", limit, actual);
+
+  if (entity->drql_limit_reached && actual == 0) {
+    uint32_t max_limit = entity->tx_maxsize;
+    uint32_t next = limit > max_limit / 10 ? max_limit : limit * 10;
+
+    entity->common.stats.txpdu_status_bytes = next;
+    LOG_E(RLC, "[DRQL][Buffer Starved] limit: %u -> %u, actual: %d\n",
+          limit,
+          entity->common.stats.txpdu_status_bytes,
+          entity->tx_size);
+  } else if (actual > 0) {
+    if (limit <= actual || limit - actual < actual) {
+      LOG_I(RLC, "[DRQL][Remaining][NoFit] limit: %u -> %u, actual: %u\n",
+            limit,
+            actual,
+            actual);
+      entity->common.stats.txpdu_status_bytes = actual;
+    } else {
+      LOG_I(RLC, "[DRQL][Remaining][Fit] limit: %u -> %u, actual: %u\n",
+            limit,
+            limit - actual,
+            actual);
+      entity->common.stats.txpdu_status_bytes = limit - actual;
+    }
+
+    entity->drql_limit_reached = false;
+  }
+}
+
 /*************************************************************************/
 /* PDU RX functions                                                      */
 /*************************************************************************/
@@ -744,6 +782,8 @@ lists_over:
           (nr_rlc_entity_t *)entity, upper_layer_id);
     }
   }
+
+  nr_rlc_entity_am_drql_update_limit(entity);
 
   new_retransmit_list->next = cur_retransmit_list;
 
