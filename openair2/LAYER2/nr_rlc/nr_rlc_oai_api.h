@@ -37,6 +37,8 @@
 #include "openair2/RRC/NR/nr_rrc_proto.h"
 #include "nr_rlc_ue_manager.h"
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 struct NR_RLC_Config;
@@ -60,6 +62,12 @@ void nr_rlc_release_entity(int ue_id, logical_chan_id_t channel_id);
 void nr_rlc_reconfigure_entity(int ue_id, int lc_id, NR_RLC_Config_t *rlc_Config);
 
 int nr_rlc_get_available_tx_space(const int ue_id, const logical_chan_id_t channel_idP);
+
+bool nr_rlc_get_drql_status(int ue_id,
+                            int rb_id,
+                            uint32_t *limit_bytes,
+                            uint32_t *occupancy_bytes,
+                            uint32_t *available_bytes);
 
 void nr_rlc_activate_avg_time_to_tx(const int ue_id, const logical_chan_id_t channel_id, const bool is_on);
 

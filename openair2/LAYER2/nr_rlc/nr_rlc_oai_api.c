@@ -27,6 +27,8 @@
 #include "nr_rlc_asn1_utils.h"
 #include "nr_rlc_ue_manager.h"
 #include "nr_rlc_entity.h"
+#include "nr_rlc_entity_am.h"
+#include "nr_rlc_drql.h"
 #include "nr_rlc_oai_api.h"
 #include "NR_RLC-BearerConfig.h"
 #include "NR_DRB-ToAddMod.h"
@@ -433,6 +435,46 @@ int nr_rlc_get_available_tx_space(const int ue_id, const logical_chan_id_t chann
   }
 
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
+
+  return ret;
+}
+
+bool nr_rlc_get_drql_status(int ue_id,
+                            int rb_id,
+                            uint32_t *limit_bytes,
+                            uint32_t *occupancy_bytes,
+                            uint32_t *available_bytes)
+{
+  bool ret = false;
+  uint32_t limit = 0;
+  uint32_t occupancy = 0;
+  uint32_t available = 0;
+
+  nr_rlc_manager_lock(nr_rlc_ue_manager);
+
+  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
+  nr_rlc_entity_t *rb = NULL;
+
+  if (ue != NULL && rb_id >= 1 && rb_id <= MAX_DRBS_PER_UE)
+    rb = ue->drb[rb_id - 1];
+
+  if (rb != NULL && rb->stats.mode == NR_RLC_AM) {
+    nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)rb;
+
+    limit = nr_rlc_drql_is_enabled() ? entity->common.stats.txpdu_status_bytes : (uint32_t)entity->tx_maxsize;
+    occupancy = (uint32_t)entity->tx_size;
+    available = limit > occupancy ? limit - occupancy : 0;
+    ret = true;
+  }
+
+  nr_rlc_manager_unlock(nr_rlc_ue_manager);
+
+  if (limit_bytes != NULL)
+    *limit_bytes = limit;
+  if (occupancy_bytes != NULL)
+    *occupancy_bytes = occupancy;
+  if (available_bytes != NULL)
+    *available_bytes = available;
 
   return ret;
 }
