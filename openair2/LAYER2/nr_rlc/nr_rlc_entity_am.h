@@ -22,6 +22,8 @@
 #ifndef _NR_RLC_ENTITY_AM_H_
 #define _NR_RLC_ENTITY_AM_H_
 
+#include <stdbool.h>
+
 #include "nr_rlc_entity.h"
 #include "nr_rlc_sdu.h"
 #include "nr_rlc_pdu.h"
