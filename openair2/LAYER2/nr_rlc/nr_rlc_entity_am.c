@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "nr_rlc_drql.h"
 #include "nr_rlc_pdu.h"
 
 #include "LOG/log.h"
@@ -1809,12 +1810,25 @@ void nr_rlc_entity_am_recv_sdu(nr_rlc_entity_t *_entity,
     entity->t_log_buffer_full = entity->t_current;
   }
 
+  if (nr_rlc_drql_is_enabled()
+      && entity->tx_size + size > entity->common.stats.txpdu_status_bytes) {
+    entity->drql_limit_reached = true;
+    entity->sdu_rejected++;
+    LOG_I(RLC, "[DRQL][Limit Reached] limit: %d, actual: %d\n",
+          entity->common.stats.txpdu_status_bytes,
+          entity->tx_size);
+    return;
+  }
+
   if (entity->tx_size + size > entity->tx_maxsize) {
     entity->sdu_rejected++;
     return;
   }
 
   entity->tx_size += size;
+  if (nr_rlc_drql_is_enabled())
+    entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+
   // SDU received: Count as arrival bytes
   entity->common.stats.rxsdu_bytes += size;
 
@@ -2090,4 +2104,3 @@ int nr_rlc_entity_am_available_tx_space(nr_rlc_entity_t *_entity)
   nr_rlc_entity_am_t *entity = (nr_rlc_entity_am_t *)_entity;
   return entity->tx_maxsize - entity->tx_size;
 }
-
