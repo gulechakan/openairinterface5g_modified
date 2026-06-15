@@ -44,6 +44,12 @@ static int compute_pdu_header_size(nr_rlc_entity_am_t *entity,
   return header_size;
 }
 
+static void nr_rlc_entity_am_drql_sync_txbuf_occ(nr_rlc_entity_am_t *entity)
+{
+  if (nr_rlc_drql_is_enabled())
+    entity->common.stats.txbuf_occ_bytes = entity->tx_size;
+}
+
 /*************************************************************************/
 /* PDU RX functions                                                      */
 /*************************************************************************/
@@ -580,6 +586,7 @@ process_wait_list_head:
           end_wait_list = prev_wait_list;
         if (nr_rlc_free_sdu_segment(cur_wait_list)) {
           entity->tx_size -= sdu_size;
+          nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
           // Wait-ACK: count as successfully transmitted bytes
           entity->common.stats.txsdu_bytes += sdu_size;
           entity->common.sdu_successful_delivery(
@@ -645,6 +652,7 @@ process_retransmit_list_head:
                                             + cur->size;
         if (nr_rlc_free_sdu_segment(cur)) {
           entity->tx_size -= sdu_size;
+          nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
           // Retransmit-ACK: count as successfully transmitted bytes
           entity->common.stats.txsdu_bytes += sdu_size;
           entity->common.sdu_successful_delivery(
@@ -704,6 +712,7 @@ lists_over:
       end_wait_list = prev_wait_list;
     if (nr_rlc_free_sdu_segment(cur_wait_list)) {
       entity->tx_size -= sdu_size;
+      nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
       // Wait-NACK done: count as successfully transmitted bytes
       entity->common.stats.txsdu_bytes += sdu_size;
       entity->common.sdu_successful_delivery(
@@ -727,6 +736,7 @@ lists_over:
                                         + cur->size;
     if (nr_rlc_free_sdu_segment(cur)) {
       entity->tx_size -= sdu_size;
+      nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
       // Retransmit-NACK done: count as successfully transmitted bytes
       entity->common.stats.txsdu_bytes += sdu_size;
       entity->common.sdu_successful_delivery(
@@ -2026,6 +2036,7 @@ void nr_rlc_entity_am_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
                                     + cur->size;
 
   entity->tx_size -= cur->sdu->size;
+  nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
 
   /* Uncomment to assert if SDU are ever discarded */
   // assert(0 != 0 && "[RLC-TRAP] SDU discard should never be reached!");
@@ -2076,6 +2087,8 @@ static void clear_entity(nr_rlc_entity_am_t *entity)
   entity->tx_list         = NULL;
   entity->tx_end          = NULL;
   entity->tx_size         = 0;
+  entity->drql_limit_reached = false;
+  nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
 
   entity->wait_list       = NULL;
   entity->wait_end        = NULL;
