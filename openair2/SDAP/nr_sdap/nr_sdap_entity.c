@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
 
 typedef struct {
   nr_sdap_entity_t *sdap_entity_llist;
@@ -82,6 +83,176 @@ void nr_pdcp_submit_sdap_ctrl_pdu(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_s
   LOG_D(SDAP, "Control PDU - Submitting Control PDU to DRB ID:  %ld\n", sdap_ctrl_pdu_drb);
   LOG_D(SDAP, "QFI: %u\n R: %u\n D/C: %u\n", ctrl_pdu.QFI, ctrl_pdu.R, ctrl_pdu.DC);
   return;
+}
+
+static long long sdap_time_now_ms(void)
+{
+  struct timespec ts = {0};
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+}
+
+void nr_sdap_free_queued_sdu(sdap_sdu_pdu_t *item)
+{
+  if (item == NULL)
+    return;
+
+  free(item->sdu_buffer);
+  free(item);
+}
+
+bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
+                            protocol_ctxt_t *ctxt_p,
+                            const srb_flag_t srb_flag,
+                            const rb_id_t rb_id,
+                            const mui_t mui,
+                            const confirm_t confirm,
+                            const sdu_size_t sdu_buffer_size,
+                            unsigned char *const sdu_buffer,
+                            const pdcp_transmission_mode_t pt_mode,
+                            const uint32_t *sourceL2Id,
+                            const uint32_t *destinationL2Id,
+                            const uint8_t qfi,
+                            const bool rqi)
+{
+  if (entity == NULL || ctxt_p == NULL || sdu_buffer == NULL || qfi >= SDAP_MAX_QFI)
+    return false;
+
+  sdap_sdu_pdu_t *item = calloc(1, sizeof(*item));
+  if (item == NULL)
+    return false;
+
+  item->sdu_buffer = malloc(sdu_buffer_size);
+  if (item->sdu_buffer == NULL) {
+    free(item);
+    return false;
+  }
+
+  memcpy(item->sdu_buffer, sdu_buffer, sdu_buffer_size);
+
+  item->entity = entity;
+  item->ctxt = *ctxt_p;
+  item->srb_flag = srb_flag;
+  item->rb_id = rb_id;
+  item->mui = mui;
+  item->confirm = confirm;
+  item->sdu_buffer_size = sdu_buffer_size;
+  item->pt_mode = pt_mode;
+  item->qfi = qfi;
+  item->rqi = rqi;
+  item->enqueue_time = clock();
+
+  if (sourceL2Id != NULL) {
+    item->has_source_l2_id = true;
+    item->source_l2_id = *sourceL2Id;
+  }
+
+  if (destinationL2Id != NULL) {
+    item->has_destination_l2_id = true;
+    item->destination_l2_id = *destinationL2Id;
+  }
+
+  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[qfi];
+
+  pthread_mutex_lock(&queue->lock);
+
+  item->prev = queue->tail;
+  item->next = NULL;
+
+  if (queue->tail != NULL)
+    queue->tail->next = item;
+  else
+    queue->head = item;
+
+  queue->tail = item;
+
+  if (queue->length == 0) {
+    queue->current_time_ms = sdap_time_now_ms();
+    queue->tx_pdu_bytes_per_interval = 0;
+  }
+
+  queue->length++;
+  queue->size += sdu_buffer_size;
+  queue->tx_sdu_bytes += sdu_buffer_size;
+  queue->enabled = true;
+  entity->sdap_queued_bytes += sdu_buffer_size;
+
+  pthread_mutex_unlock(&queue->lock);
+
+  return true;
+}
+
+sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t qfi)
+{
+  if (entity == NULL || qfi >= SDAP_MAX_QFI)
+    return NULL;
+
+  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[qfi];
+
+  pthread_mutex_lock(&queue->lock);
+
+  sdap_sdu_pdu_t *item = queue->head;
+  if (item != NULL) {
+    queue->head = item->next;
+    if (queue->head != NULL)
+      queue->head->prev = NULL;
+    else
+      queue->tail = NULL;
+
+    queue->length--;
+    queue->size -= item->sdu_buffer_size;
+    queue->tx_pdu_bytes += item->sdu_buffer_size;
+    queue->tx_pdu_bytes_per_interval += item->sdu_buffer_size;
+    entity->sdap_queued_bytes -= item->sdu_buffer_size;
+
+    item->next = NULL;
+    item->prev = NULL;
+    item->dequeue_time = clock();
+  }
+
+  pthread_mutex_unlock(&queue->lock);
+
+  return item;
+}
+
+void nr_sdap_flush_dl_queues(nr_sdap_entity_t *entity)
+{
+  if (entity == NULL)
+    return;
+
+  for (uint8_t qfi = 0; qfi < SDAP_MAX_QFI; qfi++) {
+    sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[qfi];
+
+    pthread_mutex_lock(&queue->lock);
+
+    sdap_sdu_pdu_t *item = queue->head;
+    queue->head = NULL;
+    queue->tail = NULL;
+    queue->length = 0;
+    queue->size = 0;
+
+    pthread_mutex_unlock(&queue->lock);
+
+    while (item != NULL) {
+      sdap_sdu_pdu_t *next = item->next;
+      nr_sdap_free_queued_sdu(item);
+      item = next;
+    }
+  }
+
+  entity->sdap_queued_bytes = 0;
+}
+
+static void nr_sdap_destroy_entity(nr_sdap_entity_t *entity)
+{
+  if (entity == NULL)
+    return;
+
+  nr_sdap_flush_dl_queues(entity);
+  for (int qfi = 0; qfi < SDAP_MAX_QFI; qfi++)
+    pthread_mutex_destroy(&entity->sdap_sdu_pdu_queues[qfi].lock);
+
+  free(entity);
 }
 
 static bool nr_sdap_tx_entity(nr_sdap_entity_t *entity,
@@ -509,6 +680,9 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb,
   sdap_entity->ue_id = ue_id;
   sdap_entity->pdusession_id = pdusession_id;
 
+  sdap_entity->dl_enqueue_sdu = nr_sdap_dl_enqueue_sdu;
+  sdap_entity->dl_dequeue_pdu = nr_sdap_dl_dequeue_pdu;
+
   sdap_entity->tx_entity = nr_sdap_tx_entity;
   sdap_entity->rx_entity = nr_sdap_rx_entity;
 
@@ -519,6 +693,16 @@ nr_sdap_entity_t *new_nr_sdap_entity(int is_gnb,
   sdap_entity->qfi2drb_map_update = nr_sdap_qfi2drb_map_update;
   sdap_entity->qfi2drb_map_delete = nr_sdap_qfi2drb_map_del;
   sdap_entity->qfi2drb_map = nr_sdap_qfi2drb_map;
+
+  for (int qfi = 0; qfi < SDAP_MAX_QFI; qfi++) {
+    if (pthread_mutex_init(&sdap_entity->sdap_sdu_pdu_queues[qfi].lock, NULL) != 0) {
+      LOG_E(SDAP, "Failed to initialize SDAP DL queue lock for QFI %d\n", qfi);
+      for (int cleanup_qfi = 0; cleanup_qfi < qfi; cleanup_qfi++)
+        pthread_mutex_destroy(&sdap_entity->sdap_sdu_pdu_queues[cleanup_qfi].lock);
+      free(sdap_entity);
+      return NULL;
+    }
+  }
 
   if(is_defaultDRB) {
     sdap_entity->default_drb = drb_identity;
@@ -585,7 +769,7 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
 
   if (entityPtr->ue_id == ue_id && entityPtr->pdusession_id == pdusession_id) {
     sdap_info.sdap_entity_llist = sdap_info.sdap_entity_llist->next_entity;
-    free(entityPtr);
+    nr_sdap_destroy_entity(entityPtr);
     LOG_D(SDAP, "Successfully deleted Entity.\n");
     ret = true;
   } else {
@@ -598,7 +782,7 @@ bool nr_sdap_delete_entity(ue_id_t ue_id, int pdusession_id)
 
     if (entityPtr->ue_id == ue_id && entityPtr->pdusession_id == pdusession_id) {
       entityPrev->next_entity = entityPtr->next_entity;
-      free(entityPtr);
+      nr_sdap_destroy_entity(entityPtr);
       LOG_D(SDAP, "Successfully deleted Entity.\n");
       ret = true;
     }
@@ -622,7 +806,7 @@ bool nr_sdap_delete_ue_entities(ue_id_t ue_id)
   /* Handle scenario where ue_id matches the head of the list */
   while (entityPtr != NULL && entityPtr->ue_id == ue_id && upperBound < MAX_DRBS_PER_UE) {
     sdap_info.sdap_entity_llist = entityPtr->next_entity;
-    free(entityPtr);
+    nr_sdap_destroy_entity(entityPtr);
     entityPtr = sdap_info.sdap_entity_llist;
     ret = true;
   }
@@ -633,7 +817,7 @@ bool nr_sdap_delete_ue_entities(ue_id_t ue_id)
       entityPtr = entityPtr->next_entity;
     } else {
       entityPrev->next_entity = entityPtr->next_entity;
-      free(entityPtr);
+      nr_sdap_destroy_entity(entityPtr);
       entityPtr = entityPrev->next_entity;
       LOG_I(SDAP, "Successfully deleted SDAP entity for UE %ld\n", ue_id);
       ret = true;

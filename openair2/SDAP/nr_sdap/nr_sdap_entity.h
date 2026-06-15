@@ -24,6 +24,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include <time.h>
 #include "common/platform_types.h"
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_entity.h"
 #include "NR_RadioBearerConfig.h"
@@ -76,11 +78,66 @@ typedef struct qfi2drb_s {
 
 void nr_pdcp_submit_sdap_ctrl_pdu(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
 
-typedef struct nr_sdap_entity_s {
+typedef struct nr_sdap_entity_s nr_sdap_entity_t;
+typedef struct sdap_sdu_s sdap_sdu_pdu_t;
+typedef struct sdap_sdu_queue_s sdap_sdu_queue_t;
+
+typedef struct sdap_sdu_s {
+  nr_sdap_entity_t *entity;
+
+  protocol_ctxt_t ctxt;
+  srb_flag_t srb_flag;
+  rb_id_t rb_id;
+  mui_t mui;
+  confirm_t confirm;
+  sdu_size_t sdu_buffer_size;
+  unsigned char *sdu_buffer;
+  pdcp_transmission_mode_t pt_mode;
+
+  bool has_source_l2_id;
+  uint32_t source_l2_id;
+  bool has_destination_l2_id;
+  uint32_t destination_l2_id;
+
+  uint8_t qfi;
+  bool rqi;
+
+  clock_t enqueue_time;
+  clock_t dequeue_time;
+
+  struct sdap_sdu_s *next;
+  struct sdap_sdu_s *prev;
+} sdap_sdu_pdu_t;
+
+typedef struct sdap_sdu_queue_s {
+  sdap_sdu_pdu_t *head;
+  sdap_sdu_pdu_t *tail;
+
+  uint64_t tx_sdu_bytes;
+  uint64_t tx_pdu_bytes;
+  uint64_t dropped_sdu_bytes;
+  uint64_t dropped_sdu_pkts;
+
+  uint32_t length;
+  uint32_t size;
+  bool enabled;
+
+  long long current_time_ms;
+  uint64_t tx_pdu_bytes_per_interval;
+
+  pthread_mutex_t lock;
+} sdap_sdu_queue_t;
+
+struct nr_sdap_entity_s {
   ue_id_t ue_id;
   rb_id_t default_drb;
   int pdusession_id;
   qfi2drb_t qfi2drb_table[SDAP_MAX_QFI];
+
+  sdap_sdu_queue_t sdap_sdu_pdu_queues[SDAP_MAX_QFI];
+  uint64_t sdap_queued_bytes;
+  uint64_t sdap_dropped_sdu_bytes;
+  uint64_t sdap_dropped_sdu_pkts;
 
   void (*qfi2drb_map_update)(struct nr_sdap_entity_s *entity, uint8_t qfi, rb_id_t drb, bool has_sdap_rx, bool has_sdap_tx);
   void (*qfi2drb_map_delete)(struct nr_sdap_entity_s *entity, uint8_t qfi);
@@ -89,6 +146,22 @@ typedef struct nr_sdap_entity_s {
   nr_sdap_ul_hdr_t (*sdap_construct_ctrl_pdu)(uint8_t qfi);
   rb_id_t (*sdap_map_ctrl_pdu)(struct nr_sdap_entity_s *entity, rb_id_t pdcp_entity, int map_type, uint8_t dl_qfi);
   void (*sdap_submit_ctrl_pdu)(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_sdap_ul_hdr_t ctrl_pdu);
+
+  bool (*dl_enqueue_sdu)(struct nr_sdap_entity_s *entity,
+                         protocol_ctxt_t *ctxt_p,
+                         const srb_flag_t srb_flag,
+                         const rb_id_t rb_id,
+                         const mui_t mui,
+                         const confirm_t confirm,
+                         const sdu_size_t sdu_buffer_size,
+                         unsigned char *const sdu_buffer,
+                         const pdcp_transmission_mode_t pt_mode,
+                         const uint32_t *sourceL2Id,
+                         const uint32_t *destinationL2Id,
+                         const uint8_t qfi,
+                         const bool rqi);
+
+  sdap_sdu_pdu_t *(*dl_dequeue_pdu)(struct nr_sdap_entity_s *entity, uint8_t qfi);
 
   bool (*tx_entity)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
@@ -115,7 +188,27 @@ typedef struct nr_sdap_entity_s {
 
   /* List of entities */
   struct nr_sdap_entity_s *next_entity;
-} nr_sdap_entity_t;
+};
+
+bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
+                            protocol_ctxt_t *ctxt_p,
+                            const srb_flag_t srb_flag,
+                            const rb_id_t rb_id,
+                            const mui_t mui,
+                            const confirm_t confirm,
+                            const sdu_size_t sdu_buffer_size,
+                            unsigned char *const sdu_buffer,
+                            const pdcp_transmission_mode_t pt_mode,
+                            const uint32_t *sourceL2Id,
+                            const uint32_t *destinationL2Id,
+                            const uint8_t qfi,
+                            const bool rqi);
+
+sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t qfi);
+
+void nr_sdap_free_queued_sdu(sdap_sdu_pdu_t *item);
+
+void nr_sdap_flush_dl_queues(nr_sdap_entity_t *entity);
 
 /* QFI to DRB Mapping Related Function */
 void nr_sdap_qfi2drb_map_update(nr_sdap_entity_t *entity, uint8_t qfi, rb_id_t drb, bool has_sdap_rx, bool has_sdap_tx);
