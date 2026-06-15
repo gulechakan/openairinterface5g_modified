@@ -69,7 +69,6 @@ static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
           limit,
           entity->common.stats.txpdu_status_bytes,
           entity->tx_size);
-    entity->drql_limit_reached = false;
   } else if (actual > 0) {
     if (limit <= actual || limit - actual < actual) {
       LOG_I(RLC, "[DRQL][Remaining][NoFit] limit: %u -> %u, actual: %u\n",
