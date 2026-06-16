@@ -32,7 +32,7 @@
 #include "common/utils/time_stat.h"
 #include "common/utils/assertions.h"
 
-#define DRQL_AM_MIN_LIMIT_BYTES 1500U
+#define DRQL_AM_MIN_LIMIT_BYTES (512U * 1024U)
 #define DRQL_AM_HOLD_TIME_MS 1U
 
 static uint32_t drql_posdiff(uint32_t a, uint32_t b)
@@ -82,14 +82,16 @@ static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
   LOG_D(RLC, "[DRQL][Statistics] limit: %u, actual: %u\n", limit, actual);
 
   if (entity->drql_limit_reached && actual == 0) {
-    uint32_t next = limit + (limit + 4) / 5;
+    uint32_t next = limit * 2;
+    if (next < limit)
+      next = max_limit;
     next = drql_clamp(next, min_limit, max_limit);
 
     entity->common.stats.txpdu_status_bytes = next;
     entity->drql_slack_start_ms = now_ms;
     entity->drql_lowest_remaining_bytes = UINT32_MAX;
 
-    LOG_E(RLC, "[DRQL][Buffer Starved][Hold 1ms Growth 1.2x] limit: %u -> %u, actual: %d\n",
+    LOG_E(RLC, "[DRQL][Buffer Starved][Hold 1ms Growth 2x Min 512KiB] limit: %u -> %u, actual: %d\n",
           limit,
           entity->common.stats.txpdu_status_bytes,
           entity->tx_size);
