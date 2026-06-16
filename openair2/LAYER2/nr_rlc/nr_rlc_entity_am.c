@@ -79,12 +79,7 @@ static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
   const uint32_t max_limit = entity->tx_maxsize;
   const uint64_t now_ms = entity->t_current;
 
-  entity->common.stats.txpdu_status_bytes = min_limit;
-  entity->drql_slack_start_ms = now_ms;
-  entity->drql_lowest_remaining_bytes = UINT32_MAX;
-  entity->drql_limit_reached = false;
-  LOG_D(RLC, "[DRQL][Statistics] limit: %u, actual: %u\n", entity->common.stats.txpdu_status_bytes, actual);
-  return;
+  LOG_D(RLC, "[DRQL][Statistics] limit: %u, actual: %u\n", limit, actual);
 
   if (entity->drql_limit_reached && actual == 0) {
     uint32_t next = limit * 2;
