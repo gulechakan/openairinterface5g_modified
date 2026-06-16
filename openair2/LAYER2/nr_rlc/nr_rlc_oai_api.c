@@ -446,14 +446,25 @@ bool nr_rlc_get_drql_status(int ue_id,
                             uint32_t *occupancy_bytes,
                             uint32_t *available_bytes)
 {
+  static uint64_t query_failures;
   bool ret = false;
   uint32_t limit = 0;
   uint32_t occupancy = 0;
   uint32_t available = 0;
+  int resolved_ue_id = ue_id;
+
+  if (cu_exists_f1_ue_data((uint32_t)ue_id)) {
+    f1_ue_data_t ue_data = cu_get_f1_ue_data((uint32_t)ue_id);
+    if (ue_data.secondary_ue != 0)
+      resolved_ue_id = ue_data.secondary_ue;
+  }
 
   nr_rlc_manager_lock(nr_rlc_ue_manager);
 
-  nr_rlc_ue_t *ue = nr_rlc_manager_get_ue(nr_rlc_ue_manager, ue_id);
+  nr_rlc_ue_t *ue = nr_rlc_manager_find_ue(nr_rlc_ue_manager, resolved_ue_id);
+  if (ue == NULL && resolved_ue_id != ue_id)
+    ue = nr_rlc_manager_find_ue(nr_rlc_ue_manager, ue_id);
+
   nr_rlc_entity_t *rb = NULL;
 
   if (ue != NULL && rb_id >= 1 && rb_id <= MAX_DRBS_PER_UE)
@@ -469,6 +480,18 @@ bool nr_rlc_get_drql_status(int ue_id,
   }
 
   nr_rlc_manager_unlock(nr_rlc_ue_manager);
+
+  if (!ret) {
+    query_failures++;
+    if (query_failures % 1000 == 1)
+      LOG_I(RLC,
+            "[DRQL][Query] no AM DRQL status requested UE %d resolved UE %d DRB %d rb %p failures %llu\n",
+            ue_id,
+            resolved_ue_id,
+            rb_id,
+            (void *)rb,
+            (unsigned long long)query_failures);
+  }
 
   if (limit_bytes != NULL)
     *limit_bytes = limit;
