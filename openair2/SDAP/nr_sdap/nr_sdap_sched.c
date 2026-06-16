@@ -23,7 +23,6 @@
 #include "nr_sdap_drql.h"
 #include "nr_sdap_entity.h"
 #include "common/utils/LOG/log.h"
-#include "openair2/LAYER2/nr_rlc/nr_rlc_oai_api.h"
 
 #include <pthread.h>
 #include <stdint.h>
@@ -38,6 +37,12 @@ static uint64_t sdap_sched_forwarded_packets;
 static uint64_t sdap_sched_forwarded_bytes;
 static uint64_t sdap_sched_blocked_checks;
 static uint64_t sdap_sched_rlc_query_failures;
+
+extern bool nr_rlc_get_drql_status(int ue_id,
+                                   int rb_id,
+                                   uint32_t *limit_bytes,
+                                   uint32_t *occupancy_bytes,
+                                   uint32_t *available_bytes) __attribute__((weak));
 
 static void nr_sdap_sched_add_timeout(struct timespec *deadline)
 {
@@ -61,7 +66,8 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
   uint32_t limit_bytes = 0;
   uint32_t occupancy_bytes = 0;
   uint32_t available_bytes = 0;
-  if (!nr_rlc_get_drql_status((int)entity->ue_id, (int)drb_id, &limit_bytes, &occupancy_bytes, &available_bytes)) {
+  if (nr_rlc_get_drql_status == NULL
+      || !nr_rlc_get_drql_status((int)entity->ue_id, (int)drb_id, &limit_bytes, &occupancy_bytes, &available_bytes)) {
     sdap_sched_rlc_query_failures++;
     if (sdap_sched_rlc_query_failures % 1000 == 1)
       LOG_I(SDAP,
