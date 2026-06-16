@@ -43,6 +43,7 @@
 #include "gnb_paramdef.h"
 #include "NR_MAC_gNB/mac_proto.h"
 #include "LAYER2/nr_rlc/nr_rlc_drql.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_drql.h"
 #include "RRC/NR/nr_rrc_extern.h"
 #include "nfapi/oai_integration/vendor_ext.h"
 #ifdef ENABLE_AERIAL
@@ -1427,6 +1428,8 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
       nr_rlc_drql_set_enabled(RC.nrmac[j]->drql_enable);
       RC.nrmac[j]->sdap_drql_enable = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_ENABLE_IDX].u8ptr != 0;
       RC.nrmac[j]->sdap_drql_max_queue_bytes = *MacRLC_ParamList.paramarray[j][MACRLC_SDAP_DRQL_MAX_QUEUE_BYTES_IDX].uptr;
+      nr_sdap_drql_set_config(RC.nrmac[j]->sdap_drql_enable,
+                              RC.nrmac[j]->sdap_drql_max_queue_bytes);
       LOG_I(NR_MAC,
             "DRQL config: RLC %s, SDAP %s, SDAP max queue %u bytes\n",
             RC.nrmac[j]->drql_enable ? "enabled" : "disabled",
