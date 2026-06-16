@@ -200,12 +200,34 @@ bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
   return true;
 }
 
-sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t qfi)
+bool nr_sdap_dl_peek_sdu(nr_sdap_entity_t *entity, uint8_t queue_class, nr_sdap_dl_queue_head_t *head)
 {
-  if (entity == NULL || qfi >= SDAP_MAX_QFI)
+  if (entity == NULL || queue_class >= SDAP_MAX_QFI || head == NULL)
+    return false;
+
+  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[queue_class];
+
+  pthread_mutex_lock(&queue->lock);
+
+  const sdap_sdu_pdu_t *item = queue->head;
+  if (item != NULL) {
+    head->qfi = item->qfi;
+    head->sdu_buffer_size = item->sdu_buffer_size;
+    head->queue_length = queue->length;
+    head->queue_size = queue->size;
+  }
+
+  pthread_mutex_unlock(&queue->lock);
+
+  return item != NULL;
+}
+
+sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t queue_class)
+{
+  if (entity == NULL || queue_class >= SDAP_MAX_QFI)
     return NULL;
 
-  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[qfi];
+  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[queue_class];
 
   pthread_mutex_lock(&queue->lock);
 
@@ -259,6 +281,15 @@ void nr_sdap_flush_dl_queues(nr_sdap_entity_t *entity)
   }
 
   entity->sdap_queued_bytes = 0;
+}
+
+void nr_sdap_for_each_entity(nr_sdap_entity_iterator_cb_t cb, void *data)
+{
+  if (cb == NULL)
+    return;
+
+  for (nr_sdap_entity_t *entity = sdap_info.sdap_entity_llist; entity != NULL; entity = entity->next_entity)
+    cb(entity, data);
 }
 
 static void nr_sdap_destroy_entity(nr_sdap_entity_t *entity)

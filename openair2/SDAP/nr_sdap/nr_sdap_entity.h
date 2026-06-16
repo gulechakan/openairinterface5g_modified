@@ -81,6 +81,8 @@ void nr_pdcp_submit_sdap_ctrl_pdu(ue_id_t ue_id, rb_id_t sdap_ctrl_pdu_drb, nr_s
 typedef struct nr_sdap_entity_s nr_sdap_entity_t;
 typedef struct sdap_sdu_s sdap_sdu_pdu_t;
 typedef struct sdap_sdu_queue_s sdap_sdu_queue_t;
+typedef struct nr_sdap_dl_queue_head_s nr_sdap_dl_queue_head_t;
+typedef void (*nr_sdap_entity_iterator_cb_t)(nr_sdap_entity_t *entity, void *data);
 
 typedef struct sdap_sdu_s {
   nr_sdap_entity_t *entity;
@@ -128,6 +130,13 @@ typedef struct sdap_sdu_queue_s {
   pthread_mutex_t lock;
 } sdap_sdu_queue_t;
 
+typedef struct nr_sdap_dl_queue_head_s {
+  uint8_t qfi;
+  sdu_size_t sdu_buffer_size;
+  uint32_t queue_length;
+  uint32_t queue_size;
+} nr_sdap_dl_queue_head_t;
+
 struct nr_sdap_entity_s {
   ue_id_t ue_id;
   rb_id_t default_drb;
@@ -161,7 +170,7 @@ struct nr_sdap_entity_s {
                          const uint8_t qfi,
                          const bool rqi);
 
-  sdap_sdu_pdu_t *(*dl_dequeue_pdu)(struct nr_sdap_entity_s *entity, uint8_t qfi);
+  sdap_sdu_pdu_t *(*dl_dequeue_pdu)(struct nr_sdap_entity_s *entity, uint8_t queue_class);
 
   bool (*tx_entity)(struct nr_sdap_entity_s *entity,
                     protocol_ctxt_t *ctxt_p,
@@ -204,11 +213,15 @@ bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
                             const uint8_t qfi,
                             const bool rqi);
 
-sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t qfi);
+bool nr_sdap_dl_peek_sdu(nr_sdap_entity_t *entity, uint8_t queue_class, nr_sdap_dl_queue_head_t *head);
+
+sdap_sdu_pdu_t *nr_sdap_dl_dequeue_pdu(nr_sdap_entity_t *entity, uint8_t queue_class);
 
 void nr_sdap_free_queued_sdu(sdap_sdu_pdu_t *item);
 
 void nr_sdap_flush_dl_queues(nr_sdap_entity_t *entity);
+
+void nr_sdap_for_each_entity(nr_sdap_entity_iterator_cb_t cb, void *data);
 
 /* QFI to DRB Mapping Related Function */
 void nr_sdap_qfi2drb_map_update(nr_sdap_entity_t *entity, uint8_t qfi, rb_id_t drb, bool has_sdap_rx, bool has_sdap_tx);
