@@ -21,6 +21,7 @@
 
 #include "nr_sdap.h"
 #include "nr_sdap_drql.h"
+#include "nr_sdap_sched.h"
 
 uint8_t nas_qfi;
 uint8_t nas_pduid;
@@ -64,6 +65,8 @@ bool sdap_data_req(protocol_ctxt_t *ctxt_p,
     return ret;
   }
 
+  nr_sdap_sched_start();
+
   bool ret = sdap_entity->dl_enqueue_sdu(sdap_entity,
                                          ctxt_p,
                                          srb_flag,
@@ -77,7 +80,9 @@ bool sdap_data_req(protocol_ctxt_t *ctxt_p,
                                          destinationL2Id,
                                          qfi,
                                          rqi);
-  if (!ret)
+  if (ret)
+    nr_sdap_sched_notify();
+  else
     LOG_E(SDAP, "%s:%d:%s: SDAP DRQL enqueue failed\n", __FILE__, __LINE__, __FUNCTION__);
 
   return ret;
