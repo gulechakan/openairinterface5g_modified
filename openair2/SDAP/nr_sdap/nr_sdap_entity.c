@@ -93,6 +93,11 @@ static long long sdap_time_now_ms(void)
   return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
+static bool sdap_crossed_log_bucket(uint64_t before, uint64_t after, uint64_t bucket_size)
+{
+  return before / bucket_size != after / bucket_size;
+}
+
 void nr_sdap_free_queued_sdu(sdap_sdu_pdu_t *item)
 {
   if (item == NULL)
@@ -180,8 +185,10 @@ bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
   queue->enabled = true;
   entity->sdap_queued_bytes += sdu_buffer_size;
 
-  const bool should_log = queue->length == 1
-                          || queued_bytes_before / (1024 * 1024) != queue->size / (1024 * 1024);
+  const uint64_t tx_sdu_bytes_before = queue->tx_sdu_bytes - sdu_buffer_size;
+  const bool should_log = queue->tx_sdu_bytes == sdu_buffer_size
+                          || sdap_crossed_log_bucket(tx_sdu_bytes_before, queue->tx_sdu_bytes, 10 * 1024 * 1024)
+                          || sdap_crossed_log_bucket(queued_bytes_before, queue->size, 1024 * 1024);
   if (should_log) {
     LOG_I(SDAP,
           "[DRQL][SDAP Queue] UE %lu PDU session %d QFI %u queue_class %u sdu_bytes %u queue_length %u queue_bytes %u total_entity_queued_bytes %" PRIu64 "\n",

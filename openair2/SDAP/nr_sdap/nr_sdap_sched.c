@@ -29,6 +29,7 @@
 #include <time.h>
 
 #define SDAP_DRQL_QUEUE_CLASSES 2
+#define SDAP_DRQL_LOG_BYTE_BUCKET (10 * 1024 * 1024)
 
 static pthread_once_t sdap_sched_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t sdap_sched_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -38,6 +39,11 @@ static uint64_t sdap_sched_forwarded_bytes;
 static uint64_t sdap_sched_blocked_checks;
 static uint64_t sdap_sched_rlc_query_failures;
 static nr_sdap_rlc_drql_status_query_t sdap_sched_rlc_status_query;
+
+static bool sdap_sched_crossed_log_bucket(uint64_t before, uint64_t after)
+{
+  return before / SDAP_DRQL_LOG_BYTE_BUCKET != after / SDAP_DRQL_LOG_BYTE_BUCKET;
+}
 
 void nr_sdap_sched_set_rlc_status_query(nr_sdap_rlc_drql_status_query_t query)
 {
@@ -144,9 +150,12 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
           (unsigned)item->sdu_buffer_size);
 
   if (ret) {
+    const uint64_t forwarded_bytes_before = sdap_sched_forwarded_bytes;
     sdap_sched_forwarded_packets++;
     sdap_sched_forwarded_bytes += pdu_bytes;
-    if (sdap_sched_forwarded_packets % 1000 == 1 || head.queue_length <= 1)
+    if (sdap_sched_forwarded_packets <= 10
+        || sdap_sched_forwarded_packets % 10000 == 0
+        || sdap_sched_crossed_log_bucket(forwarded_bytes_before, sdap_sched_forwarded_bytes))
       LOG_I(SDAP,
             "[DRQL][SDAP Sched] forwarded UE %lu DRB %ld QFI %u queue_class %u pdu_bytes %u limit %u occupancy %u available %u queue_length_before %u queue_bytes_before %u forwarded_packets %llu forwarded_bytes %llu\n",
             (unsigned long)entity->ue_id,
