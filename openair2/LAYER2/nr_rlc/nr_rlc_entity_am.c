@@ -21,6 +21,7 @@
 
 #include "nr_rlc_entity_am.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,6 +31,23 @@
 #include "LOG/log.h"
 #include "common/utils/time_stat.h"
 #include "common/utils/assertions.h"
+
+#define DRQL_AM_MIN_LIMIT_BYTES 1500U
+#define DRQL_AM_HOLD_TIME_MS 1U
+
+static uint32_t drql_posdiff(uint32_t a, uint32_t b)
+{
+  return a > b ? a - b : 0;
+}
+
+static uint32_t drql_clamp(uint32_t value, uint32_t min, uint32_t max)
+{
+  if (value < min)
+    return min;
+  if (value > max)
+    return max;
+  return value;
+}
 
 /* for a given SDU/SDU segment, computes the corresponding PDU header size */
 static int compute_pdu_header_size(nr_rlc_entity_am_t *entity,
@@ -56,35 +74,54 @@ static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
     return;
 
   uint32_t limit = entity->common.stats.txpdu_status_bytes;
-  uint32_t actual = entity->common.stats.txbuf_occ_bytes;
+  const uint32_t actual = entity->common.stats.txbuf_occ_bytes;
+  const uint32_t min_limit = DRQL_AM_MIN_LIMIT_BYTES;
+  const uint32_t max_limit = entity->tx_maxsize;
+  const uint64_t now_ms = entity->t_current;
 
   LOG_D(RLC, "[DRQL][Statistics] limit: %u, actual: %u\n", limit, actual);
 
   if (entity->drql_limit_reached && actual == 0) {
-    uint32_t max_limit = entity->tx_maxsize;
-    uint32_t next = limit > max_limit / 10 ? max_limit : limit * 10;
+    uint32_t next = limit + (limit + 4) / 5;
+    next = drql_clamp(next, min_limit, max_limit);
 
     entity->common.stats.txpdu_status_bytes = next;
-    LOG_E(RLC, "[DRQL][Buffer Starved][Growth 10x] limit: %u -> %u, actual: %d\n",
+    entity->drql_slack_start_ms = now_ms;
+    entity->drql_lowest_remaining_bytes = UINT32_MAX;
+
+    LOG_E(RLC, "[DRQL][Buffer Starved][Hold 1ms Growth 1.2x] limit: %u -> %u, actual: %d\n",
           limit,
           entity->common.stats.txpdu_status_bytes,
           entity->tx_size);
   } else if (actual > 0) {
-    if (limit <= actual || limit - actual < actual) {
-      LOG_I(RLC, "[DRQL][Remaining][NoFit] limit: %u -> %u, actual: %u\n",
-            limit,
-            actual,
+    if (entity->drql_slack_start_ms == 0)
+      entity->drql_slack_start_ms = now_ms;
+
+    if (entity->drql_lowest_remaining_bytes == 0 || actual < entity->drql_lowest_remaining_bytes) {
+      entity->drql_lowest_remaining_bytes = actual;
+      LOG_D(RLC, "[DRQL][Hold][Lowest Remaining] actual: %u\n", actual);
+    }
+
+    if (now_ms > entity->drql_slack_start_ms + DRQL_AM_HOLD_TIME_MS) {
+      const uint32_t previous_limit = limit;
+      limit = drql_posdiff(limit, entity->drql_lowest_remaining_bytes);
+      limit = drql_clamp(limit, min_limit, max_limit);
+      entity->common.stats.txpdu_status_bytes = limit;
+
+      LOG_I(RLC, "[DRQL][Hold][Reduce] limit: %u -> %u, lowest_remaining: %u, actual: %u\n",
+            previous_limit,
+            entity->common.stats.txpdu_status_bytes,
+            entity->drql_lowest_remaining_bytes,
             actual);
-      entity->common.stats.txpdu_status_bytes = actual;
-    } else {
-      LOG_I(RLC, "[DRQL][Remaining][Fit] limit: %u -> %u, actual: %u\n",
-            limit,
-            limit - actual,
-            actual);
-      entity->common.stats.txpdu_status_bytes = limit - actual;
+
+      entity->drql_slack_start_ms = now_ms;
+      entity->drql_lowest_remaining_bytes = UINT32_MAX;
     }
 
     entity->drql_limit_reached = false;
+  } else if (!entity->drql_limit_reached && actual == 0) {
+    entity->drql_slack_start_ms = now_ms;
+    entity->drql_lowest_remaining_bytes = UINT32_MAX;
   }
 }
 
@@ -2128,6 +2165,8 @@ static void clear_entity(nr_rlc_entity_am_t *entity)
   entity->tx_end          = NULL;
   entity->tx_size         = 0;
   entity->drql_limit_reached = false;
+  entity->drql_lowest_remaining_bytes = UINT32_MAX;
+  entity->drql_slack_start_ms = 0;
   nr_rlc_entity_am_drql_sync_txbuf_occ(entity);
 
   entity->wait_list       = NULL;

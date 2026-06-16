@@ -21,6 +21,7 @@
 
 #include "nr_rlc_entity.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 #include "nr_rlc_entity_am.h"
@@ -102,6 +103,7 @@ nr_rlc_entity_t *new_nr_rlc_entity_am(
 
   ret->tx_maxsize = tx_maxsize;
   ret->common.stats.txpdu_status_bytes = ret->tx_maxsize;
+  ret->drql_lowest_remaining_bytes = UINT32_MAX;
   ret->rx_maxsize = rx_maxsize;
 
   ret->t_poll_retransmit  = t_poll_retransmit;
