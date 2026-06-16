@@ -62,10 +62,13 @@ static void nr_rlc_entity_am_drql_update_limit(nr_rlc_entity_am_t *entity)
 
   if (entity->drql_limit_reached && actual == 0) {
     uint32_t max_limit = entity->tx_maxsize;
-    uint32_t next = limit > max_limit / 10 ? max_limit : limit * 10;
+    uint32_t growth = limit / 5;
+    if (growth == 0)
+      growth = 1;
+    uint32_t next = limit > max_limit - growth ? max_limit : limit + growth;
 
     entity->common.stats.txpdu_status_bytes = next;
-    LOG_E(RLC, "[DRQL][Buffer Starved] limit: %u -> %u, actual: %d\n",
+    LOG_E(RLC, "[DRQL][Buffer Starved][Growth 1.2x] limit: %u -> %u, actual: %d\n",
           limit,
           entity->common.stats.txpdu_status_bytes,
           entity->tx_size);
