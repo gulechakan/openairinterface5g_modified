@@ -27,6 +27,7 @@
 #include "nr_rlc_entity_am.h"
 #include "nr_rlc_entity_um.h"
 #include "nr_rlc_entity_tm.h"
+#include "nr_rlc_drql.h"
 
 #include "LOG/log.h"
 
@@ -102,7 +103,7 @@ nr_rlc_entity_t *new_nr_rlc_entity_am(
   }
 
   ret->tx_maxsize = tx_maxsize;
-  ret->common.stats.txpdu_status_bytes = ret->tx_maxsize;
+  ret->common.stats.txpdu_status_bytes = nr_rlc_drql_is_enabled() ? (512U * 1024U) : ret->tx_maxsize;
   ret->drql_lowest_remaining_bytes = UINT32_MAX;
   ret->rx_maxsize = rx_maxsize;
 
