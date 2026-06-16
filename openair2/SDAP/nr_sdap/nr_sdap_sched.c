@@ -26,10 +26,18 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 
 #define SDAP_DRQL_QUEUE_CLASSES 2
+#define SDAP_DRQL_BLOCK_COOLDOWN_NS (1000 * 1000)
 #define SDAP_DRQL_LOG_BYTE_BUCKET (10 * 1024 * 1024)
+
+typedef struct sdap_sched_entity_state_s {
+  nr_sdap_entity_t *entity;
+  uint64_t blocked_until_ns[SDAP_DRQL_QUEUE_CLASSES];
+  struct sdap_sched_entity_state_s *next;
+} sdap_sched_entity_state_t;
 
 static pthread_once_t sdap_sched_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t sdap_sched_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -39,10 +47,34 @@ static uint64_t sdap_sched_forwarded_bytes;
 static uint64_t sdap_sched_blocked_checks;
 static uint64_t sdap_sched_rlc_query_failures;
 static nr_sdap_rlc_drql_status_query_t sdap_sched_rlc_status_query;
+static sdap_sched_entity_state_t *sdap_sched_entity_states;
 
 static bool sdap_sched_crossed_log_bucket(uint64_t before, uint64_t after)
 {
   return before / SDAP_DRQL_LOG_BYTE_BUCKET != after / SDAP_DRQL_LOG_BYTE_BUCKET;
+}
+
+static uint64_t sdap_sched_now_ns(void)
+{
+  struct timespec ts = {0};
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1000ULL * 1000ULL * 1000ULL + ts.tv_nsec;
+}
+
+static sdap_sched_entity_state_t *sdap_sched_get_entity_state(nr_sdap_entity_t *entity)
+{
+  for (sdap_sched_entity_state_t *state = sdap_sched_entity_states; state != NULL; state = state->next)
+    if (state->entity == entity)
+      return state;
+
+  sdap_sched_entity_state_t *state = calloc(1, sizeof(*state));
+  if (state == NULL)
+    return NULL;
+
+  state->entity = entity;
+  state->next = sdap_sched_entity_states;
+  sdap_sched_entity_states = state;
+  return state;
 }
 
 void nr_sdap_sched_set_rlc_status_query(nr_sdap_rlc_drql_status_query_t query)
@@ -63,6 +95,11 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
 {
   nr_sdap_dl_queue_head_t head = {0};
   if (!nr_sdap_dl_peek_sdu(entity, queue_class, &head))
+    return false;
+
+  const uint64_t now_ns = sdap_sched_now_ns();
+  sdap_sched_entity_state_t *state = sdap_sched_get_entity_state(entity);
+  if (state != NULL && state->blocked_until_ns[queue_class] > now_ns)
     return false;
 
   rb_id_t drb_id = entity->qfi2drb_map(entity, head.qfi);
@@ -102,8 +139,11 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
 
   const uint32_t pdu_bytes = head.sdu_buffer_size + SDAP_HDR_LENGTH;
   if (pdu_bytes > available_bytes) {
+    if (state != NULL)
+      state->blocked_until_ns[queue_class] = now_ns + SDAP_DRQL_BLOCK_COOLDOWN_NS;
+
     sdap_sched_blocked_checks++;
-    if (sdap_sched_blocked_checks % 1000 == 1)
+    if (sdap_sched_blocked_checks <= 10 || sdap_sched_blocked_checks % 100000 == 0)
       LOG_I(SDAP,
             "[DRQL][SDAP Sched] blocked UE %lu DRB %ld QFI %u queue_class %u pdu_bytes %u limit %u occupancy %u available %u queue_length %u queue_bytes %u checks %llu\n",
             (unsigned long)entity->ue_id,
@@ -150,6 +190,9 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
           (unsigned)item->sdu_buffer_size);
 
   if (ret) {
+    if (state != NULL)
+      state->blocked_until_ns[queue_class] = 0;
+
     const uint64_t forwarded_bytes_before = sdap_sched_forwarded_bytes;
     sdap_sched_forwarded_packets++;
     sdap_sched_forwarded_bytes += pdu_bytes;
