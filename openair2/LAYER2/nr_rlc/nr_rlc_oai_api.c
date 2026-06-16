@@ -30,6 +30,7 @@
 #include "nr_rlc_entity_am.h"
 #include "nr_rlc_drql.h"
 #include "nr_rlc_oai_api.h"
+#include "openair2/SDAP/nr_sdap/nr_sdap_sched.h"
 #include "NR_RLC-BearerConfig.h"
 #include "NR_DRB-ToAddMod.h"
 #include "NR_DRB-ToAddModList.h"
@@ -501,6 +502,9 @@ int rlc_module_init(int enb_flag)
   if (enb_flag == 0) inited_ue = 1;
 
   nr_rlc_ue_manager = new_nr_rlc_ue_manager(enb_flag);
+
+  if (enb_flag == 1)
+    nr_sdap_sched_set_rlc_status_query(nr_rlc_get_drql_status);
 
   if (pthread_mutex_unlock(&lock)) abort();
 

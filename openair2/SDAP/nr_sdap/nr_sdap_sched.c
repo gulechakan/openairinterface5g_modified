@@ -37,12 +37,12 @@ static uint64_t sdap_sched_forwarded_packets;
 static uint64_t sdap_sched_forwarded_bytes;
 static uint64_t sdap_sched_blocked_checks;
 static uint64_t sdap_sched_rlc_query_failures;
+static nr_sdap_rlc_drql_status_query_t sdap_sched_rlc_status_query;
 
-extern bool nr_rlc_get_drql_status(int ue_id,
-                                   int rb_id,
-                                   uint32_t *limit_bytes,
-                                   uint32_t *occupancy_bytes,
-                                   uint32_t *available_bytes) __attribute__((weak));
+void nr_sdap_sched_set_rlc_status_query(nr_sdap_rlc_drql_status_query_t query)
+{
+  sdap_sched_rlc_status_query = query;
+}
 
 static void nr_sdap_sched_add_timeout(struct timespec *deadline)
 {
@@ -66,13 +66,27 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
   uint32_t limit_bytes = 0;
   uint32_t occupancy_bytes = 0;
   uint32_t available_bytes = 0;
-  if (nr_rlc_get_drql_status == NULL
-      || !nr_rlc_get_drql_status((int)entity->ue_id, (int)drb_id, &limit_bytes, &occupancy_bytes, &available_bytes)) {
+  if (sdap_sched_rlc_status_query == NULL) {
     sdap_sched_rlc_query_failures++;
     if (sdap_sched_rlc_query_failures % 1000 == 1)
       LOG_I(SDAP,
-            "[DRQL][SDAP Sched] RLC query unavailable UE %lu DRB %ld QFI %u queue_class %u failures %llu\n",
+            "[DRQL][SDAP Sched] RLC query callback missing entity UE %lu head UE %lu DRB %ld QFI %u queue_class %u failures %llu\n",
             (unsigned long)entity->ue_id,
+            (unsigned long)head.ue_id,
+            (long)drb_id,
+            (unsigned)head.qfi,
+            (unsigned)queue_class,
+            (unsigned long long)sdap_sched_rlc_query_failures);
+    return false;
+  }
+
+  if (!sdap_sched_rlc_status_query((int)head.ue_id, (int)drb_id, &limit_bytes, &occupancy_bytes, &available_bytes)) {
+    sdap_sched_rlc_query_failures++;
+    if (sdap_sched_rlc_query_failures % 1000 == 1)
+      LOG_I(SDAP,
+            "[DRQL][SDAP Sched] RLC query returned false entity UE %lu head UE %lu DRB %ld QFI %u queue_class %u failures %llu\n",
+            (unsigned long)entity->ue_id,
+            (unsigned long)head.ue_id,
             (long)drb_id,
             (unsigned)head.qfi,
             (unsigned)queue_class,

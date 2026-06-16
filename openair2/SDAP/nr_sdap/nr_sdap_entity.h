@@ -131,6 +131,7 @@ typedef struct sdap_sdu_queue_s {
 } sdap_sdu_queue_t;
 
 typedef struct nr_sdap_dl_queue_head_s {
+  ue_id_t ue_id;
   uint8_t qfi;
   sdu_size_t sdu_buffer_size;
   uint32_t queue_length;

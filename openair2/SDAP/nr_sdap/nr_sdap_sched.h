@@ -22,6 +22,16 @@
 #ifndef NR_SDAP_SCHED_H
 #define NR_SDAP_SCHED_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef bool (*nr_sdap_rlc_drql_status_query_t)(int ue_id,
+                                                int rb_id,
+                                                uint32_t *limit_bytes,
+                                                uint32_t *occupancy_bytes,
+                                                uint32_t *available_bytes);
+
+void nr_sdap_sched_set_rlc_status_query(nr_sdap_rlc_drql_status_query_t query);
 void nr_sdap_sched_start(void);
 void nr_sdap_sched_notify(void);
 

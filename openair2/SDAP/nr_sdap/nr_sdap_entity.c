@@ -211,6 +211,7 @@ bool nr_sdap_dl_peek_sdu(nr_sdap_entity_t *entity, uint8_t queue_class, nr_sdap_
 
   const sdap_sdu_pdu_t *item = queue->head;
   if (item != NULL) {
+    head->ue_id = item->ctxt.rntiMaybeUEid;
     head->qfi = item->qfi;
     head->sdu_buffer_size = item->sdu_buffer_size;
     head->queue_length = queue->length;
