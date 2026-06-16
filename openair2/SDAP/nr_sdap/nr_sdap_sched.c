@@ -32,8 +32,10 @@
 #define SDAP_DRQL_QUEUE_CLASSES 2
 #define SDAP_DRQL_BLOCK_COOLDOWN_NS (1000 * 1000)
 #define SDAP_DRQL_LOG_BYTE_BUCKET (10 * 1024 * 1024)
-#define SDAP_DRQL_MAX_BATCH_PDUS 32
-#define SDAP_DRQL_MAX_BATCH_BYTES (64 * 1024)
+#define SDAP_DRQL_MAX_BATCH_PDUS 128
+#define SDAP_DRQL_MIN_BATCH_BYTES (64 * 1024)
+#define SDAP_DRQL_MAX_BATCH_BYTES (256 * 1024)
+#define SDAP_DRQL_AVAILABILITY_BATCH_DIVISOR 4
 
 typedef struct sdap_sched_entity_state_s {
   nr_sdap_entity_t *entity;
@@ -62,6 +64,7 @@ static uint64_t sdap_sched_batch_calls;
 static uint64_t sdap_sched_batch_multi_pdu;
 static uint64_t sdap_sched_batch_pdu_limited;
 static uint64_t sdap_sched_batch_byte_limited;
+static uint64_t sdap_sched_batch_target_limited;
 static nr_sdap_rlc_drql_status_query_t sdap_sched_rlc_status_query;
 static sdap_sched_entity_state_t *sdap_sched_entity_states;
 
@@ -127,7 +130,7 @@ static void nr_sdap_sched_log_util_if_due(bool forwarded)
     sdap_sched_max_observed_queue_bytes = snapshot.queued_bytes;
 
   LOG_I(SDAP,
-        "[DRQL][SDAP Util] passes %llu forwarded_last_pass %d queued_bytes %llu active_queues %u max_queued_bytes %llu forwarded_packets %llu forwarded_bytes %llu queue_peeks %llu available_positive %llu nofit_zero_available %llu nofit_positive_available %llu unused_available_bytes %llu cooldown_skips %llu missing_mapping %llu rlc_query_failures %llu blocked_checks %llu batch_calls %llu batch_multi_pdu %llu batch_pdu_limited %llu batch_byte_limited %llu\n",
+        "[DRQL][SDAP Util] passes %llu forwarded_last_pass %d queued_bytes %llu active_queues %u max_queued_bytes %llu forwarded_packets %llu forwarded_bytes %llu queue_peeks %llu available_positive %llu nofit_zero_available %llu nofit_positive_available %llu unused_available_bytes %llu cooldown_skips %llu missing_mapping %llu rlc_query_failures %llu blocked_checks %llu batch_calls %llu batch_multi_pdu %llu batch_pdu_limited %llu batch_byte_limited %llu batch_target_limited %llu\n",
         (unsigned long long)sdap_sched_passes,
         forwarded ? 1 : 0,
         (unsigned long long)snapshot.queued_bytes,
@@ -147,7 +150,8 @@ static void nr_sdap_sched_log_util_if_due(bool forwarded)
         (unsigned long long)sdap_sched_batch_calls,
         (unsigned long long)sdap_sched_batch_multi_pdu,
         (unsigned long long)sdap_sched_batch_pdu_limited,
-        (unsigned long long)sdap_sched_batch_byte_limited);
+        (unsigned long long)sdap_sched_batch_byte_limited,
+        (unsigned long long)sdap_sched_batch_target_limited);
 }
 
 void nr_sdap_sched_set_rlc_status_query(nr_sdap_rlc_drql_status_query_t query)
@@ -169,6 +173,7 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
   bool forwarded_any = false;
   uint32_t batch_pdus = 0;
   uint32_t batch_bytes = 0;
+  uint32_t target_batch_bytes = SDAP_DRQL_MIN_BATCH_BYTES;
 
   sdap_sched_batch_calls++;
 
@@ -228,6 +233,12 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
     if (available_bytes > 0)
       sdap_sched_available_positive_checks++;
 
+    target_batch_bytes = available_bytes / SDAP_DRQL_AVAILABILITY_BATCH_DIVISOR;
+    if (target_batch_bytes < SDAP_DRQL_MIN_BATCH_BYTES)
+      target_batch_bytes = SDAP_DRQL_MIN_BATCH_BYTES;
+    if (target_batch_bytes > SDAP_DRQL_MAX_BATCH_BYTES)
+      target_batch_bytes = SDAP_DRQL_MAX_BATCH_BYTES;
+
     const uint32_t pdu_bytes = head.sdu_buffer_size + SDAP_HDR_LENGTH;
     if (pdu_bytes > available_bytes) {
       if (available_bytes == 0)
@@ -255,6 +266,11 @@ static bool nr_sdap_sched_try_forward_queue(nr_sdap_entity_t *entity, uint8_t qu
               head.queue_length,
               head.queue_size,
               (unsigned long long)sdap_sched_blocked_checks);
+      break;
+    }
+
+    if (batch_pdus > 0 && batch_bytes + pdu_bytes > target_batch_bytes) {
+      sdap_sched_batch_target_limited++;
       break;
     }
 
