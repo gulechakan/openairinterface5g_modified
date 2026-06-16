@@ -25,6 +25,7 @@
 #include <openair3/ocp-gtpu/gtp_itf.h>
 #include "openair2/LAYER2/nr_pdcp/nr_pdcp_ue_manager.h"
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -172,11 +173,27 @@ bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
     queue->tx_pdu_bytes_per_interval = 0;
   }
 
+  const uint32_t queued_bytes_before = queue->size;
   queue->length++;
   queue->size += sdu_buffer_size;
   queue->tx_sdu_bytes += sdu_buffer_size;
   queue->enabled = true;
   entity->sdap_queued_bytes += sdu_buffer_size;
+
+  const bool should_log = queue->length == 1
+                          || queued_bytes_before / (1024 * 1024) != queue->size / (1024 * 1024);
+  if (should_log) {
+    LOG_I(SDAP,
+          "[DRQL][SDAP Queue] UE %lu PDU session %d QFI %u queue_class %u sdu_bytes %u queue_length %u queue_bytes %u total_entity_queued_bytes %" PRIu64 "\n",
+          (unsigned long)entity->ue_id,
+          entity->pdusession_id,
+          (unsigned)qfi,
+          (unsigned)queue_class,
+          (unsigned)sdu_buffer_size,
+          (unsigned)queue->length,
+          (unsigned)queue->size,
+          (uint64_t)entity->sdap_queued_bytes);
+  }
 
   pthread_mutex_unlock(&queue->lock);
 
