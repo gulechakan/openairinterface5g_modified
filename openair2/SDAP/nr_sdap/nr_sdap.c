@@ -20,6 +20,7 @@
  */
 
 #include "nr_sdap.h"
+#include "nr_sdap_drql.h"
 
 uint8_t nas_qfi;
 uint8_t nas_pduid;
@@ -46,19 +47,39 @@ bool sdap_data_req(protocol_ctxt_t *ctxt_p,
     return 0;
   }
 
-  bool ret = sdap_entity->tx_entity(sdap_entity,
-                                    ctxt_p,
-                                    srb_flag,
-                                    rb_id,
-                                    mui,
-                                    confirm,
-                                    sdu_buffer_size,
-                                    sdu_buffer,
-                                    pt_mode,
-                                    sourceL2Id,
-                                    destinationL2Id,
-                                    qfi,
-                                    rqi);
+  if (!nr_sdap_drql_is_enabled()) {
+    bool ret = sdap_entity->tx_entity(sdap_entity,
+                                      ctxt_p,
+                                      srb_flag,
+                                      rb_id,
+                                      mui,
+                                      confirm,
+                                      sdu_buffer_size,
+                                      sdu_buffer,
+                                      pt_mode,
+                                      sourceL2Id,
+                                      destinationL2Id,
+                                      qfi,
+                                      rqi);
+    return ret;
+  }
+
+  bool ret = sdap_entity->dl_enqueue_sdu(sdap_entity,
+                                         ctxt_p,
+                                         srb_flag,
+                                         rb_id,
+                                         mui,
+                                         confirm,
+                                         sdu_buffer_size,
+                                         sdu_buffer,
+                                         pt_mode,
+                                         sourceL2Id,
+                                         destinationL2Id,
+                                         qfi,
+                                         rqi);
+  if (!ret)
+    LOG_E(SDAP, "%s:%d:%s: SDAP DRQL enqueue failed\n", __FILE__, __LINE__, __FUNCTION__);
+
   return ret;
 }
 

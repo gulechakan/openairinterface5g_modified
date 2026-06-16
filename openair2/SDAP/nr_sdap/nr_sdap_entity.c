@@ -152,7 +152,8 @@ bool nr_sdap_dl_enqueue_sdu(nr_sdap_entity_t *entity,
     item->destination_l2_id = *destinationL2Id;
   }
 
-  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[qfi];
+  uint8_t queue_class = sdu_buffer_size < 100 ? 0 : 1;
+  sdap_sdu_queue_t *queue = &entity->sdap_sdu_pdu_queues[queue_class];
 
   pthread_mutex_lock(&queue->lock);
 
