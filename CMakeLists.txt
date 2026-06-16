@@ -1216,6 +1216,7 @@ set(NR_SDAP_SRC
   ${OPENAIR2_DIR}/SDAP/nr_sdap/nr_sdap.c
   ${OPENAIR2_DIR}/SDAP/nr_sdap/nr_sdap_entity.c
   ${OPENAIR2_DIR}/SDAP/nr_sdap/nr_sdap_drql.c
+  ${OPENAIR2_DIR}/SDAP/nr_sdap/nr_sdap_sched.c
 )
   
 set(L2_SRC
